@@ -7,7 +7,7 @@ services:
       - POSTGRES_PASSWORD=${DB_PASS}
       - POSTGRES_DB=${DB_SCHEMA}
     volumes:
-      - ./tmp/postgres_data:/var/lib/postgresql
+      - db_data:/var/lib/postgresql
     expose:
       - 5432
     ports:
@@ -31,3 +31,5 @@ services:
       - bridge
 networks:
   bridge:
+volumes:
+  db_data:
