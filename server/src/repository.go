@@ -40,8 +40,8 @@ const (
 	StatusCE      SubmissionStatus = "CE"
 	StatusSE      SubmissionStatus = "SE"
 	StatusRE      SubmissionStatus = "RE"
-	StatueTLE     SubmissionStatus = "TLE"
-	StatueMLE     SubmissionStatus = "MLE"
+	StatusTLE     SubmissionStatus = "TLE"
+	StatusMLE     SubmissionStatus = "MLE"
 )
 
 type Submission struct {
