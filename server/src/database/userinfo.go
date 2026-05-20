@@ -18,11 +18,36 @@ type UserInfo struct {
 	PasswordHash string    `gorm:"not null"`
 }
 
-func CreateUser(name string, passwordHash string) error {
-	if res := db.Table("user_infos").Create(&UserInfo{Name: name, PasswordHash: passwordHash}); res.Error != nil {
-		return res.Error
+func IsUserValid(id string, target UserType) bool {
+	user, err := GetUserById(id)
+	if err != nil {
+		return false
 	}
-	return nil
+	if user.Type == target {
+		return true
+	}
+	if target == TypeUser && user.Type == TypeAdmin {
+		return true
+	}
+	return false
+}
+
+func CreateUser(userType UserType, name string, passwordHash string) error {
+	res := db.Table("user_infos").Create(&UserInfo{Type: userType, Name: name, PasswordHash: passwordHash})
+	return res.Error
+}
+
+func GetUserById(_id string) (UserInfo, error) {
+	id, err := uuid.Parse(_id)
+	if err != nil {
+		return UserInfo{}, err
+	}
+
+	var user UserInfo
+	if res := db.Table("user_infos").Where(&UserInfo{Id: id}).Take(&user); res.Error != nil {
+		return UserInfo{}, res.Error
+	}
+	return user, nil
 }
 
 func GetUserByName(name string) (UserInfo, error) {

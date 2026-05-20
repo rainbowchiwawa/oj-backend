@@ -1,9 +1,8 @@
 FROM golang:latest AS builder
 WORKDIR /app
-COPY go.mod go.sum ./
+COPY ./src /app/
 RUN go mod download
-COPY ./src /app/src/
-RUN go build -o main ./src
+RUN go build -o main ./
 
 FROM alpine:latest
 WORKDIR /app

@@ -1,0 +1,40 @@
+package database
+
+import (
+	"time"
+
+	"github.com/google/uuid"
+)
+
+type InvalidToken struct {
+	Id        uuid.UUID `gorm:"type:uuid;primary_key"`
+	ExpiredAt time.Time `gorm:"not null"`
+}
+
+func IsTokenValid(_id string) bool {
+	id, err := uuid.Parse(_id)
+	if err != nil {
+		return false
+	}
+
+	var invalidToken InvalidToken
+	if res := db.Table("invalid_tokens").Where(&InvalidToken{Id: id}).Take(&invalidToken); res.Error != nil {
+		return true
+	}
+	return false
+}
+
+func CreateInvalidTokenAndClear(_id string, expiredAt float64) error {
+	id, err := uuid.Parse(_id)
+	if err != nil {
+		return err
+	}
+
+	res := db.Table("invalid_tokens").Create(&InvalidToken{Id: id, ExpiredAt: time.Unix(int64(expiredAt), int64(expiredAt*1000)%1000)})
+	return res.Error
+}
+
+func ClearExpiredToken() error {
+	res := db.Table("invalid_tokens").Where("expired_at < ?", time.Now()).Delete(&InvalidToken{})
+	return res.Error
+}

@@ -33,10 +33,14 @@ func Init() {
 
 	if err != nil {
 		fmt.Println(err)
-		fmt.Println("fuck you postgres!")
 		os.Exit(-1)
 	}
 
-	db.AutoMigrate(&UserInfo{}, &Problem{}, &Submission{})
-	fmt.Println("db: Im done")
+	err = db.AutoMigrate(&UserInfo{}, &Problem{}, &Submission{}, &InvalidToken{})
+	if err != nil {
+		fmt.Println(err)
+		os.Exit(-1)
+	}
+
+	fmt.Println("db ok")
 }
