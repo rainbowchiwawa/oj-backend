@@ -24,7 +24,7 @@ func IsTokenValid(_id string) bool {
 	return false
 }
 
-func CreateInvalidTokenAndClear(_id string, expiredAt float64) error {
+func CreateInvalidToken(_id string, expiredAt float64) error {
 	id, err := uuid.Parse(_id)
 	if err != nil {
 		return err

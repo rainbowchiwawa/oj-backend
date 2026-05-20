@@ -100,7 +100,7 @@ func unauthorized() func(ctx *gin.Context, code int, message string) {
 func logoutResponse() func(ctx *gin.Context) {
 	return func(ctx *gin.Context) {
 		claims := jwt.ExtractClaims(ctx)
-		database.CreateInvalidTokenAndClear(claims[jwtIdentityKey].(string), claims["exp"].(float64))
+		database.CreateInvalidToken(claims[jwtIdentityKey].(string), claims["exp"].(float64))
 		database.ClearExpiredToken()
 		ctx.JSON(http.StatusOK, gin.H{
 			"code":    http.StatusOK,
