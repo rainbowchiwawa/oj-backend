@@ -28,9 +28,9 @@ func UserLoginHandler(ctx *gin.Context) {
 		return
 	}
 
-	var user database.UserInfo
-	if res := database.DB.Table("user_infos").Where(&database.UserInfo{Name: body.Name}).Take(&user); res.Error != nil {
-		fmt.Println(res.Error)
+	user, err := database.GetUserByName(body.Name)
+	if err != nil {
+		fmt.Println(err)
 		ctx.String(http.StatusUnauthorized, "")
 		return
 	}
@@ -42,7 +42,6 @@ func UserLoginHandler(ctx *gin.Context) {
 	}
 
 	ctx.String(http.StatusOK, "")
-
 }
 
 func UserRegisterHandler(ctx *gin.Context) {
@@ -52,8 +51,8 @@ func UserRegisterHandler(ctx *gin.Context) {
 	}
 
 	hash := sha256.Sum256([]byte(body.Password))
-	if res := database.DB.Table("user_infos").Create(&database.UserInfo{Name: body.Name, PasswordHash: hex.EncodeToString(hash[:])}); res.Error != nil {
-		fmt.Println(res.Error)
+	if err := database.CreateUser(body.Name, hex.EncodeToString(hash[:])); err != nil {
+		fmt.Println(err)
 		ctx.String(http.StatusConflict, "")
 		return
 	}
