@@ -1,5 +1,11 @@
 package main
 
+import (
+	"oj/server/database"
+	"oj/server/routes"
+)
+
 func main() {
-	initDB()
+	database.Init()
+	routes.Init()
 }

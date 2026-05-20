@@ -1,4 +1,4 @@
-package main
+package database
 
 import (
 	"fmt"
@@ -10,7 +10,7 @@ import (
 	"github.com/google/uuid"
 )
 
-var db *gorm.DB
+var DB *gorm.DB
 
 type Config struct {
 	Host   string
@@ -20,9 +20,17 @@ type Config struct {
 	Schema string
 }
 
+type UserType = string
+
+const (
+	TypeUser  UserType = "user"
+	TypeAdmin UserType = "admin"
+)
+
 type UserInfo struct {
 	Id           uuid.UUID `gorm:"type:uuid;primary_key;default:gen_random_uuid()"`
-	Name         string    `gorm:"not null"`
+	Type         UserType  `gorm:"not null"`
+	Name         string    `gorm:"not null;unique"`
 	PasswordHash string    `gorm:"not null"`
 }
 
@@ -49,7 +57,7 @@ type Submission struct {
 	Status SubmissionStatus `gorm:"type:varchar(16);default:'pending';index;not null"`
 }
 
-func initDB() {
+func Init() {
 	config := Config{
 		Host:   os.Getenv("DB_HOST"),
 		Port:   os.Getenv("DB_PORT"),
@@ -60,7 +68,7 @@ func initDB() {
 	dsn := fmt.Sprintf("host=%s user=%s password=%s dbname=%s port=%s sslmode=disable", config.Host, config.User, config.Pass, config.Schema, config.Port)
 
 	var err error
-	db, err = gorm.Open(postgres.Open(dsn), &gorm.Config{})
+	DB, err = gorm.Open(postgres.Open(dsn), &gorm.Config{})
 
 	if err != nil {
 		fmt.Println(err)
@@ -68,6 +76,6 @@ func initDB() {
 		os.Exit(-1)
 	}
 
-	db.AutoMigrate(&UserInfo{}, &Problem{}, &Submission{})
+	DB.AutoMigrate(&UserInfo{}, &Problem{}, &Submission{})
 	fmt.Println("db: Im done")
 }
