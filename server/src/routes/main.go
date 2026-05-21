@@ -18,6 +18,7 @@ func Init() {
 	}
 
 	router := gin.Default()
+	router.MaxMultipartMemory = 50 << 20 // 50 MB
 	api := router.Group("/api")
 	{
 		users := api.Group("/users")
@@ -39,7 +40,7 @@ func Init() {
 		}
 		problemsAuthed := api.Group("/problems", adminAuth.MiddlewareFunc())
 		{
-			problemsAuthed.PUT("", ProblemCreateHandler)
+			problemsAuthed.PUT("", ProblemCreateOrEditHandler)
 			problemsAuthed.DELETE("/:id", ProblemDeleteHandler)
 			problemsAuthed.GET("/:id/testcases", ProblemTestCasesGetHandler)
 		}

@@ -3,10 +3,10 @@ package routes
 import (
 	"errors"
 	"fmt"
+	"log"
 	"mime/multipart"
 	"net/http"
 	"os"
-	"path/filepath"
 
 	"oj/server/database"
 	"oj/server/utility"
@@ -15,16 +15,24 @@ import (
 	"gorm.io/gorm"
 )
 
+// maxUploadSize is the maximum allowed size for uploaded zip files (50 MB).
+const maxUploadSize = 50 << 20
+
 type ProblemCreateRequest struct {
 	Title       string                `form:"title" binding:"required"`
 	Description string                `form:"description" binding:"required"`
 	File        *multipart.FileHeader `form:"file" binding:"required"`
 }
 
-func ProblemCreateHandler(ctx *gin.Context) {
+func ProblemCreateOrEditHandler(ctx *gin.Context) {
 	var body ProblemCreateRequest
 	if err := ctx.ShouldBind(&body); err != nil {
-		ctx.String(http.StatusBadRequest, "invalid request: " + err.Error())
+		ctx.String(http.StatusBadRequest, "invalid request: "+err.Error())
+		return
+	}
+
+	if body.File.Size > maxUploadSize {
+		ctx.String(http.StatusBadRequest, fmt.Sprintf("file too large: %d bytes (max %d)", body.File.Size, maxUploadSize))
 		return
 	}
 
@@ -34,20 +42,57 @@ func ProblemCreateHandler(ctx *gin.Context) {
 		return
 	}
 	defer file.Close()
-	
-	problemId, err := database.CreateOrEditProblem(body.Title, body.Description)
+
+	if err := utility.ValidateZipMagic(file); err != nil {
+		ctx.String(http.StatusBadRequest, err.Error())
+		return
+	}
+
+	problemId, isNew, err := database.CreateOrEditProblem(body.Title, body.Description)
 	if err != nil {
 		ctx.String(http.StatusInternalServerError, "cannot create problem")
 		return
+	}
+
+	success := false
+	defer func() {
+		if success {
+			if !isNew {
+				utility.CleanupProblemBackup(problemId)
+			}
+			return
+		}
+		// Rollback: remove partially-created new directory.
+		if cleanErr := utility.DeleteProblemDirectory(problemId); cleanErr != nil {
+			log.Printf("rollback: failed to delete problem directory %s: %v", problemId, cleanErr)
+		}
+		if isNew {
+			// New problem — remove the DB record too.
+			if cleanErr := database.DeleteProblem(problemId); cleanErr != nil {
+				log.Printf("rollback: failed to delete problem record %s: %v", problemId, cleanErr)
+			}
+		} else {
+			// Edit — restore old directory from backup.
+			if cleanErr := utility.RestoreProblemDirectory(problemId); cleanErr != nil {
+				log.Printf("rollback: failed to restore old problem directory %s: %v", problemId, cleanErr)
+			}
+		}
+	}()
+
+	if !isNew {
+		if err := utility.BackupProblemDirectory(problemId); err != nil {
+			ctx.String(http.StatusInternalServerError, "cannot backup old problem directory")
+			return
+		}
 	}
 
 	if err := utility.CreateProblemDirectory(problemId); err != nil {
 		ctx.String(http.StatusInternalServerError, "cannot create problem directory")
 		return
 	}
-	
+
 	if err := utility.ExtractProblemFile(file, body.File.Size, problemId); err != nil {
-		ctx.String(http.StatusInternalServerError, "cannot extract problem file")
+		ctx.String(http.StatusInternalServerError, "cannot extract problem file: "+err.Error())
 		return
 	}
 
@@ -61,13 +106,13 @@ func ProblemCreateHandler(ctx *gin.Context) {
 		return
 	}
 
+	success = true
 	ctx.String(http.StatusOK, "")
 }
 
 func ProblemDeleteHandler(ctx *gin.Context) {
 	id := ctx.Param("id")
 
-	// 1. Check if the problem exists
 	_, err := database.GetProblemById(id)
 	if err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
@@ -77,21 +122,24 @@ func ProblemDeleteHandler(ctx *gin.Context) {
 		}
 		return
 	}
-	
-	
 
-	// 2. Delete database record
+	// Backup directory first so we can restore if DB delete fails.
+	if err := utility.BackupProblemDirectory(id); err != nil {
+		ctx.String(http.StatusInternalServerError, "cannot backup problem directory: "+err.Error())
+		return
+	}
+
 	if err := database.DeleteProblem(id); err != nil {
+		// DB delete failed — restore directory from backup.
+		if restoreErr := utility.RestoreProblemDirectory(id); restoreErr != nil {
+			log.Printf("rollback: failed to restore problem directory %s: %v", id, restoreErr)
+		}
 		ctx.String(http.StatusInternalServerError, "cannot delete problem from database: "+err.Error())
 		return
 	}
-	
-	// 3. Delete directory
-	if err := utility.DeleteProblemDirectory(id); err != nil {
-		ctx.String(http.StatusInternalServerError, "cannot delete problem directory")
-		return
-	}
 
+	// Both succeeded — remove the backup.
+	utility.CleanupProblemBackup(id)
 	ctx.String(http.StatusOK, "")
 }
 
@@ -135,11 +183,7 @@ func ProblemTemplateGetHandler(ctx *gin.Context) {
 		return
 	}
 
-	problemsDir := os.Getenv("PROBLEMS_DIR")
-	if problemsDir == "" {
-		problemsDir = "../../problems"
-	}
-	zipPath := filepath.Join(problemsDir, id, "template.zip")
+	zipPath := utility.GetProblemFilePath(id, "template.zip")
 
 	if _, err := os.Stat(zipPath); err != nil {
 		if os.IsNotExist(err) {
@@ -166,11 +210,7 @@ func ProblemTestCasesGetHandler(ctx *gin.Context) {
 		return
 	}
 
-	problemsDir := os.Getenv("PROBLEMS_DIR")
-	if problemsDir == "" {
-		problemsDir = "../../problems"
-	}
-	zipPath := filepath.Join(problemsDir, id, "problem.zip")
+	zipPath := utility.GetProblemFilePath(id, "problem.zip")
 
 	if _, err := os.Stat(zipPath); err != nil {
 		if os.IsNotExist(err) {
