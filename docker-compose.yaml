@@ -24,6 +24,9 @@ services:
     environment:
       - DB_HOST=db
       - DB_PORT=5432
+      - PROBLEMS_DIR=/problems
+    volumes:
+      - ./problems:/problems
     expose:
       - 8080
     ports:

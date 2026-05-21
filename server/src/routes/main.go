@@ -10,9 +10,10 @@ import (
 )
 
 func Init() {
-	userAuth, err := jwt.New(JWTInitParams(database.TypeUser))
-	if err != nil {
-		fmt.Println(err)
+	userAuth, userErr := jwt.New(JWTInitParams(database.TypeUser))
+	adminAuth, adminErr := jwt.New(JWTInitParams(database.TypeAdmin))
+	if userErr != nil || adminErr != nil {
+		fmt.Println(userErr, adminErr)
 		os.Exit(-1)
 	}
 
@@ -28,6 +29,19 @@ func Init() {
 		{
 			usersAuthed.POST("/logout", userAuth.LogoutHandler)
 			usersAuthed.GET("/me", UserMeHandler)
+		}
+
+		problems := api.Group("/problems")
+		{
+			problems.GET("/:id", ProblemGetHandler)
+			problems.GET("/:id/template", ProblemTemplateGetHandler)
+			problems.GET("", ProblemsGetHandler)
+		}
+		problemsAuthed := api.Group("/problems", adminAuth.MiddlewareFunc())
+		{
+			problemsAuthed.PUT("", ProblemCreateHandler)
+			problemsAuthed.DELETE("/:id", ProblemDeleteHandler)
+			problemsAuthed.GET("/:id/testcases", ProblemTestCasesGetHandler)
 		}
 	}
 	router.Run(":8080")
