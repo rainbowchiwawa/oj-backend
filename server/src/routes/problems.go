@@ -43,11 +43,6 @@ func ProblemCreateOrEditHandler(ctx *gin.Context) {
 	}
 	defer file.Close()
 
-	if err := utility.ValidateZipMagic(file); err != nil {
-		ctx.String(http.StatusBadRequest, err.Error())
-		return
-	}
-
 	problem, isNew, err := database.CreateOrEditProblem(body.Title, body.Description)
 	if err != nil {
 		ctx.String(http.StatusInternalServerError, "cannot create problem")
@@ -108,7 +103,9 @@ func ProblemCreateOrEditHandler(ctx *gin.Context) {
 	}
 
 	success = true
-	ctx.String(http.StatusOK, "")
+	ctx.JSON(http.StatusOK, gin.H{
+		"id":      problemId,
+	})
 }
 
 func ProblemDeleteHandler(ctx *gin.Context) {
@@ -168,7 +165,20 @@ func ProblemsGetHandler(ctx *gin.Context) {
 		ctx.String(http.StatusInternalServerError, "cannot fetch problems: "+err.Error())
 		return
 	}
-	ctx.JSON(http.StatusOK, problems)
+
+	type problemResponse struct {
+		Id    string `json:"id"`
+		Title string `json:"title"`
+	}
+
+	var problemsList []problemResponse
+	for _, problem := range problems {
+		problemsList = append(problemsList, problemResponse{
+			Id:    problem.Id.String(),
+			Title: problem.Title,
+		})
+	}
+	ctx.JSON(http.StatusOK, problemsList)
 }
 
 func ProblemTemplateGetHandler(ctx *gin.Context) {

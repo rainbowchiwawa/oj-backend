@@ -20,12 +20,12 @@ const (
 )
 
 type Submission struct {
-	Id        uuid.UUID        `gorm:"type:uuid;primary_key;default:gen_random_uuid()"`
-	ProblemId uuid.UUID        `gorm:"type:uuid;not null"`
-	UserId    uuid.UUID        `gorm:"type:uuid;not null"`
-	Status    SubmissionStatus `gorm:"type:varchar(16);default:'pending';index;not null"`
-	CreatedAt time.Time        `gorm:"not null;default:now()"`
-	UpdatedAt time.Time        `gorm:"not null;default:now()"`
+	Id        uuid.UUID        `gorm:"type:uuid;primary_key;default:gen_random_uuid()" json:"id"`
+	ProblemId uuid.UUID        `gorm:"type:uuid;not null" json:"problem_id"`
+	UserId    uuid.UUID        `gorm:"type:uuid;not null" json:"user_id"`
+	Status    SubmissionStatus `gorm:"type:varchar(16);default:'pending';index;not null" json:"status"`
+	CreatedAt time.Time        `gorm:"not null;default:now()" json:"created_at"`
+	UpdatedAt time.Time        `gorm:"not null;default:now()" json:"updated_at"`
 }
 
 func CreateSubmission(problemId string, userId string) (Submission, error) {

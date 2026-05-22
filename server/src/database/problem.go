@@ -8,9 +8,9 @@ import (
 )
 
 type Problem struct {
-	Id          uuid.UUID `gorm:"type:uuid;primary_key;default:gen_random_uuid()"`
-	Title       string    `gorm:"not null;uniqueIndex"`
-	Description string    `gorm:"not null"`
+	Id          uuid.UUID `gorm:"type:uuid;primary_key;default:gen_random_uuid()" json:"id"`
+	Title       string    `gorm:"not null;uniqueIndex" json:"title"`
+	Description string    `gorm:"not null" json:"description"`
 }
 
 func CreateOrEditProblem(title string, description string) (Problem, bool, error) {

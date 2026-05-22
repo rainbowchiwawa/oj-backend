@@ -7,8 +7,8 @@ import (
 )
 
 type InvalidToken struct {
-	Id        uuid.UUID `gorm:"type:uuid;primary_key"`
-	ExpiredAt time.Time `gorm:"not null"`
+	Id        uuid.UUID `gorm:"type:uuid;primary_key" json:"id"`
+	ExpiredAt time.Time `gorm:"not null" json:"expired_at"`
 }
 
 func IsTokenValid(_id string) bool {
