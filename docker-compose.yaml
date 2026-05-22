@@ -27,6 +27,7 @@ services:
       - PROBLEMS_DIR=/problems
     volumes:
       - ./problems:/problems
+      - ./submissions:/submissions
     expose:
       - 8080
     ports:

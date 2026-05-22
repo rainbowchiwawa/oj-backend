@@ -34,3 +34,5 @@ go.work.sum
 # Problems except for template file
 problems/*
 !problems/PROBLEMS
+submissions/*
+!submissions/SUBMISSIONS

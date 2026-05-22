@@ -48,12 +48,13 @@ func ProblemCreateOrEditHandler(ctx *gin.Context) {
 		return
 	}
 
-	problemId, isNew, err := database.CreateOrEditProblem(body.Title, body.Description)
+	problem, isNew, err := database.CreateOrEditProblem(body.Title, body.Description)
 	if err != nil {
 		ctx.String(http.StatusInternalServerError, "cannot create problem")
 		return
 	}
 
+	problemId := problem.Id.String()
 	success := false
 	defer func() {
 		if success {

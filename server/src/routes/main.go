@@ -44,6 +44,14 @@ func Init() {
 			problemsAuthed.DELETE("/:id", ProblemDeleteHandler)
 			problemsAuthed.GET("/:id/testcases", ProblemTestCasesGetHandler)
 		}
+
+		submissionsAuthed := api.Group("/submissions", userAuth.MiddlewareFunc())
+		{
+			submissionsAuthed.POST("", SubmissionCreateHandler)
+			submissionsAuthed.GET("", SubmissionGetAllHandler)
+			submissionsAuthed.GET("/:submissionId", SubmissionGetHandler)
+			submissionsAuthed.GET("/:submissionId/source", SubmissionGetSourceHandler)
+		}
 	}
 	router.Run(":8080")
 }

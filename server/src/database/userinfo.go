@@ -18,18 +18,18 @@ type UserInfo struct {
 	PasswordHash string    `gorm:"not null"`
 }
 
-func IsUserValid(id string, target UserType) bool {
+func IsUserValid(id string, target UserType) (bool, error) {
 	user, err := GetUserById(id)
 	if err != nil {
-		return false
+		return false, err
 	}
 	if user.Type == target {
-		return true
+		return true, nil
 	}
 	if target == TypeUser && user.Type == TypeAdmin {
-		return true
+		return true, nil
 	}
-	return false
+	return false, nil
 }
 
 func CreateUser(userType UserType, name string, passwordHash string) error {
@@ -37,14 +37,9 @@ func CreateUser(userType UserType, name string, passwordHash string) error {
 	return res.Error
 }
 
-func GetUserById(_id string) (UserInfo, error) {
-	id, err := uuid.Parse(_id)
-	if err != nil {
-		return UserInfo{}, err
-	}
-
+func GetUserById(id string) (UserInfo, error) {
 	var user UserInfo
-	if res := db.Table("user_infos").Where(&UserInfo{Id: id}).Take(&user); res.Error != nil {
+	if res := db.Table("user_infos").Where("id = ?", id).Take(&user); res.Error != nil {
 		return UserInfo{}, res.Error
 	}
 	return user, nil
@@ -52,7 +47,7 @@ func GetUserById(_id string) (UserInfo, error) {
 
 func GetUserByName(name string) (UserInfo, error) {
 	var user UserInfo
-	if res := db.Table("user_infos").Where(&UserInfo{Name: name}).Take(&user); res.Error != nil {
+	if res := db.Table("user_infos").Where("name = ?", name).Take(&user); res.Error != nil {
 		return UserInfo{}, res.Error
 	}
 	return user, nil

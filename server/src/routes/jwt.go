@@ -6,7 +6,7 @@ import (
 	"fmt"
 	"net/http"
 	"oj/server/database"
-	"os"
+	"oj/server/utility"
 	"time"
 
 	jwt "github.com/appleboy/gin-jwt/v3"
@@ -81,7 +81,11 @@ func authorizer(userType database.UserType) func(ctx *gin.Context, data any) boo
 	return func(ctx *gin.Context, data any) bool {
 		if v, ok := data.(*JWTData); ok {
 			tokenValid := database.IsTokenValid(v.Id)
-			userValid := database.IsUserValid(v.UserId, userType)
+			userValid, err := database.IsUserValid(v.UserId, userType)
+			if err != nil {
+				return false
+			}
+
 			return tokenValid && userValid
 		}
 		return false
@@ -112,7 +116,7 @@ func logoutResponse() func(ctx *gin.Context) {
 func JWTInitParams(userType database.UserType) *jwt.GinJWTMiddleware {
 	return &jwt.GinJWTMiddleware{
 		Realm:           "oj-server",
-		Key:             []byte(os.Getenv("JWT_SECRET")),
+		Key:             []byte(utility.EnvData.JWTSecret),
 		Timeout:         time.Hour,
 		MaxRefresh:      time.Hour,
 		IdentityKey:     userIdentityKey,

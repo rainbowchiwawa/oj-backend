@@ -261,3 +261,28 @@ func CleanupProblemBackup(problemId string) {
 	dst := filepath.Join(problemsDir, problemId+".bak")
 	os.RemoveAll(dst)
 }
+
+func WriteFileToPath(file *multipart.FileHeader, path string) error {
+	inputFile, err := file.Open()
+	if err != nil {
+		return err
+	}
+	defer inputFile.Close()
+
+	bytes := make([]byte, file.Size)
+	if _, err := inputFile.Read(bytes); err != nil {
+		return err
+	}
+
+	outputFile, err := os.OpenFile(path, os.O_CREATE|os.O_TRUNC|os.O_WRONLY, 0777)
+	if err != nil {
+		return err
+	}
+	defer outputFile.Close()
+
+	if _, err := outputFile.Write(bytes); err != nil {
+		return err
+	}
+
+	return nil
+}
