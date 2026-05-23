@@ -24,10 +24,10 @@ services:
     environment:
       - DB_HOST=db
       - DB_PORT=5432
-      - PROBLEMS_DIR=/problems
+      - RUN_ENV=docker
     volumes:
-      - ./problems:/problems
-      - ./submissions:/submissions
+      - server_data:/app/data
+      - ${DOCKER_SOCKET_PATH}:/var/run/docker.sock
     expose:
       - 8080
     ports:
@@ -38,3 +38,4 @@ networks:
   bridge:
 volumes:
   db_data:
+  server_data:

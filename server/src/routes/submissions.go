@@ -5,6 +5,7 @@ import (
 	"mime/multipart"
 	"net/http"
 	"oj/server/database"
+	"oj/server/sandbox"
 	"oj/server/utility"
 
 	"github.com/gin-gonic/gin"
@@ -35,12 +36,20 @@ func SubmissionCreateHandler(ctx *gin.Context) {
 		return
 	}
 
-	path := "/submissions/" + submission.Id.String() + ".zip"
+	path := sandbox.GetSubmissionPath(submission.Id.String()) + "/source.zip"
 	if err := utility.WriteFileToPath(body.File, path); err != nil {
 		fmt.Println(err)
 		ctx.String(http.StatusInternalServerError, "failed to write file")
 		return
 	}
+
+	go func() {
+		err := sandbox.CreateWorker(&submission)
+		if err != nil {
+			return
+		}
+		database.UpdateSubmission(&submission)
+	}()
 
 	ctx.JSON(http.StatusCreated, submission.Id.String())
 }
@@ -84,6 +93,6 @@ func SubmissionGetSourceHandler(ctx *gin.Context) {
 		return
 	}
 
-	path := "/submissions/" + submission.Id.String() + ".zip"
+	path := sandbox.GetSubmissionPath(submission.Id.String()) + "/source.zip"
 	ctx.FileAttachment(path, "source.zip")
 }

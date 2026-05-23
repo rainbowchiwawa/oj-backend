@@ -17,10 +17,7 @@ import (
 var problemsDir string
 
 func init() {
-	problemsDir = os.Getenv("PROBLEMS_DIR")
-	if problemsDir == "" {
-		problemsDir = "../../problems" // 預設本地開發路徑
-	}
+	problemsDir = filepath.Join(EnvData.BasePath + "/problems")
 }
 
 func GetProblemFilePath(problemId string, filename string) string {

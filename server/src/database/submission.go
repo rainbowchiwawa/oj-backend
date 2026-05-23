@@ -20,12 +20,15 @@ const (
 )
 
 type Submission struct {
-	Id        uuid.UUID        `gorm:"type:uuid;primary_key;default:gen_random_uuid()" json:"id"`
-	ProblemId uuid.UUID        `gorm:"type:uuid;not null" json:"problem_id"`
-	UserId    uuid.UUID        `gorm:"type:uuid;not null" json:"user_id"`
-	Status    SubmissionStatus `gorm:"type:varchar(16);default:'pending';index;not null" json:"status"`
-	CreatedAt time.Time        `gorm:"not null;default:now()" json:"created_at"`
-	UpdatedAt time.Time        `gorm:"not null;default:now()" json:"updated_at"`
+	Id         uuid.UUID        `gorm:"type:uuid;primary_key;default:gen_random_uuid()" json:"id"`
+	ProblemId  uuid.UUID        `gorm:"type:uuid;not null" json:"problem_id"`
+	UserId     uuid.UUID        `gorm:"type:uuid;not null" json:"user_id"`
+	Status     SubmissionStatus `gorm:"type:varchar(16);default:'pending';index;not null" json:"status"`
+	ConfigLog  *string          `gorm:"type:text"`
+	CompileLog *string          `gorm:"type:text"`
+	OutputLog  *string          `gorm:"type:text"`
+	CreatedAt  time.Time        `gorm:"not null;default:now()" json:"created_at"`
+	UpdatedAt  time.Time        `gorm:"not null;default:now()" json:"updated_at"`
 }
 
 func CreateSubmission(problemId string, userId string) (Submission, error) {
@@ -46,8 +49,8 @@ func CreateSubmission(problemId string, userId string) (Submission, error) {
 	return newSubmission, nil
 }
 
-func UpdateSubmissionStatus(id string, status SubmissionStatus) error {
-	return db.Table("submission").Where("id = ?", id).Update("status", status).Update("updated_at", time.Now()).Error
+func UpdateSubmission(submission *Submission) error {
+	return db.Table("submissions").Where("id = ?", submission.Id.String()).Updates(submission).Error
 }
 
 func GetSubmissionById(id string) (Submission, error) {
@@ -60,7 +63,7 @@ func GetSubmissionById(id string) (Submission, error) {
 
 func GetAllSubmissionByUserId(userId string) ([]Submission, error) {
 	var submissions []Submission
-	if res := db.Table("submissions").Where("user_id = ?", userId).Find(&submissions).Order("created_at desc"); res.Error != nil {
+	if res := db.Table("submissions").Select("Id", "ProblemId", "UserId", "Status").Where("user_id = ?", userId).Find(&submissions).Order("created_at desc"); res.Error != nil {
 		return nil, res.Error
 	}
 	return submissions, nil
