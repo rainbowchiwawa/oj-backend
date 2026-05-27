@@ -52,6 +52,12 @@ func Init() {
 			submissionsAuthed.GET("/:submissionId", SubmissionGetHandler)
 			submissionsAuthed.GET("/:submissionId/source", SubmissionGetSourceHandler)
 		}
+
+		stats := api.Group("/stats")
+		{
+			stats.GET("/problems/:problemId", StatsGetProblemHandler)
+			stats.GET("/users/:userId", StatsGetUserHandler)
+		}
 	}
 	router.Run(":8080")
 }

@@ -5,7 +5,6 @@ import (
 	"errors"
 	"fmt"
 	"io/fs"
-	"oj/server/database"
 	"oj/server/utility"
 	"os"
 	"path/filepath"
@@ -18,12 +17,18 @@ import (
 type CompilerOutput struct {
 	ConfigLog  *string
 	CompileLog *string
+	ExitCode   int64
 }
 
 type RunnerOutput struct {
 	OutputLog  *string
 	UserOutput *string
 	ExitCode   int64
+}
+
+type WorkerOutput struct {
+	Compiler *CompilerOutput
+	Runner   *RunnerOutput
 }
 
 func GetSubmissionPath(submissionId string) string {
@@ -71,7 +76,8 @@ func compile(ctx context.Context, moby *client.Client, submissionId string) (Com
 		return CompilerOutput{}, err
 	}
 
-	err = <-moby.ContainerWait(ctx, containerId, client.ContainerWaitOptions{}).Error
+	waitResult := moby.ContainerWait(ctx, containerId, client.ContainerWaitOptions{})
+	res, err := <-waitResult.Result, <-waitResult.Error
 	if err != nil {
 		return CompilerOutput{}, err
 	}
@@ -80,9 +86,6 @@ func compile(ctx context.Context, moby *client.Client, submissionId string) (Com
 
 	configLogBytes, err := os.ReadFile(filepath.Join(basePath, "config.log"))
 	if err != nil {
-		if errors.Is(err, fs.ErrNotExist) {
-			return CompilerOutput{}, nil
-		}
 		return CompilerOutput{}, err
 	}
 	configLog := string(configLogBytes)
@@ -90,13 +93,13 @@ func compile(ctx context.Context, moby *client.Client, submissionId string) (Com
 	compileLogBytes, err := os.ReadFile(filepath.Join(basePath, "compile.log"))
 	if err != nil {
 		if errors.Is(err, fs.ErrNotExist) {
-			return CompilerOutput{ConfigLog: &configLog}, nil
+			return CompilerOutput{ConfigLog: &configLog, ExitCode: res.StatusCode}, nil
 		}
 		return CompilerOutput{}, err
 	}
 	compileLog := string(compileLogBytes)
 
-	return CompilerOutput{ConfigLog: &configLog, CompileLog: &compileLog}, nil
+	return CompilerOutput{ConfigLog: &configLog, CompileLog: &compileLog, ExitCode: res.StatusCode}, nil
 }
 
 func run(ctx context.Context, moby *client.Client, submissionId string) (RunnerOutput, error) {
@@ -176,45 +179,28 @@ func run(ctx context.Context, moby *client.Client, submissionId string) (RunnerO
 	return RunnerOutput{ExitCode: res.StatusCode, OutputLog: &outputLog, UserOutput: &userOutput}, nil
 }
 
-func CreateWorker(submission *database.Submission) (err error) {
+func CreateWorker(submissionId string) (WorkerOutput, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Minute)
 	defer cancel()
 
 	moby, err := client.New()
 	if err != nil {
-		return
+		return WorkerOutput{}, err
 	}
 
-	submissionId := submission.Id.String()
 	compilerOutput, err := compile(ctx, moby, submissionId)
 	if err != nil {
-		return
+		return WorkerOutput{}, err
 	}
 
-	submission.ConfigLog, submission.CompileLog = compilerOutput.ConfigLog, compilerOutput.CompileLog
-	if compilerOutput.ConfigLog == nil {
-		submission.Status = database.StatusSE
-		return
-	}
-	if compilerOutput.CompileLog == nil {
-		submission.Status = database.StatusCE
-		return
+	if compilerOutput.ExitCode != 0 {
+		return WorkerOutput{Compiler: &compilerOutput}, nil
 	}
 
 	runnerOutput, err := run(ctx, moby, submissionId)
 	if err != nil {
-		return
+		return WorkerOutput{}, err
 	}
 
-	submission.OutputLog = runnerOutput.OutputLog
-	if runnerOutput.ExitCode == 0 {
-		submission.Status = database.StatusAC
-		return
-	}
-	if runnerOutput.ExitCode == 1 {
-		submission.Status = database.StatusWA
-		return
-	}
-	submission.Status = database.StatusRE
-	return
+	return WorkerOutput{Compiler: &compilerOutput, Runner: &runnerOutput}, nil
 }

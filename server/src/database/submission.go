@@ -1,6 +1,7 @@
 package database
 
 import (
+	"oj/server/sandbox"
 	"time"
 
 	"github.com/google/uuid"
@@ -31,6 +32,11 @@ type Submission struct {
 	UpdatedAt  time.Time        `gorm:"not null;default:now()" json:"updated_at"`
 }
 
+type SubmissionAggration struct {
+	Status SubmissionStatus
+	Count  int64
+}
+
 func CreateSubmission(problemId string, userId string) (Submission, error) {
 	_problemId, err := uuid.Parse(problemId)
 	if err != nil {
@@ -49,8 +55,42 @@ func CreateSubmission(problemId string, userId string) (Submission, error) {
 	return newSubmission, nil
 }
 
-func UpdateSubmission(submission *Submission) error {
-	return db.Table("submissions").Where("id = ?", submission.Id.String()).Updates(submission).Error
+func UpdateSubmissionByWorkerOutput(id string, output *sandbox.WorkerOutput) (Submission, error) {
+	var newSubmission Submission
+	if output.Compiler == nil {
+		newSubmission = Submission{
+			ConfigLog:  nil,
+			CompileLog: nil,
+			OutputLog:  nil,
+			Status:     StatusPending,
+		}
+	} else if output.Runner == nil {
+		newSubmission = Submission{
+			ConfigLog:  output.Compiler.ConfigLog,
+			CompileLog: output.Compiler.CompileLog,
+			OutputLog:  nil,
+		}
+		if output.Compiler.CompileLog == nil {
+			newSubmission.Status = StatusSE
+		} else {
+			newSubmission.Status = StatusCE
+		}
+	} else {
+		newSubmission = Submission{
+			ConfigLog:  output.Compiler.ConfigLog,
+			CompileLog: output.Compiler.CompileLog,
+			OutputLog:  output.Runner.OutputLog,
+		}
+		if output.Runner.ExitCode != 0 {
+			newSubmission.Status = StatusRE
+		} else {
+			newSubmission.Status = StatusWA
+		}
+	}
+	if res := db.Table("submissions").Where("id = ?", id).Updates(&newSubmission); res.Error != nil {
+		return Submission{}, res.Error
+	}
+	return newSubmission, nil
 }
 
 func GetSubmissionById(id string) (Submission, error) {
@@ -67,4 +107,28 @@ func GetAllSubmissionByUserId(userId string) ([]Submission, error) {
 		return nil, res.Error
 	}
 	return submissions, nil
+}
+
+func GetStatisticByProblemId(problemId string) (map[string]int64, error) {
+	var submissions []SubmissionAggration
+	if res := db.Table("submissions").Select("Status, COUNT(*) as Count").Where("problemId = ?", problemId).Where("status <> ?", StatusPending).Group("status").Find(&submissions); res.Error != nil {
+		return nil, res.Error
+	}
+	statistic := make(map[string]int64)
+	for _, submission := range submissions {
+		statistic[submission.Status] = submission.Count
+	}
+	return statistic, nil
+}
+
+func GetStatisticByUserId(userId string) (map[string]int64, error) {
+	var submissions []SubmissionAggration
+	if res := db.Table("submissions").Select("Status, COUNT(*) as Count").Where("userId = ?", userId).Where("status <> ?", StatusPending).Group("status").Find(&submissions); res.Error != nil {
+		return nil, res.Error
+	}
+	statistic := make(map[string]int64)
+	for _, submission := range submissions {
+		statistic[submission.Status] = submission.Count
+	}
+	return statistic, nil
 }

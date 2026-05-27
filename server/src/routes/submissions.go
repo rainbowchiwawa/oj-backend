@@ -44,11 +44,12 @@ func SubmissionCreateHandler(ctx *gin.Context) {
 	}
 
 	go func() {
-		err := sandbox.CreateWorker(&submission)
+		submissionId := submission.Id.String()
+		output, err := sandbox.CreateWorker(submission.Id.String())
 		if err != nil {
 			return
 		}
-		database.UpdateSubmission(&submission)
+		database.UpdateSubmissionByWorkerOutput(submissionId, &output)
 	}()
 
 	ctx.JSON(http.StatusCreated, submission.Id.String())
