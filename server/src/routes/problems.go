@@ -36,12 +36,11 @@ func ProblemCreateOrEditHandler(ctx *gin.Context) {
 		return
 	}
 
-	file, err := body.File.Open()
+	data, err := utility.ToFileData(body.File)
 	if err != nil {
 		ctx.String(http.StatusBadRequest, "cannot open file")
 		return
 	}
-	defer file.Close()
 
 	problem, isNew, err := database.CreateOrEditProblem(body.Title, body.Description)
 	if err != nil {
@@ -87,12 +86,12 @@ func ProblemCreateOrEditHandler(ctx *gin.Context) {
 		return
 	}
 
-	if err := utility.ExtractProblemFile(file, body.File.Size, problemId); err != nil {
+	if err := utility.ExtractProblemFile(body.File, problemId); err != nil {
 		ctx.String(http.StatusInternalServerError, "cannot extract problem file: "+err.Error())
 		return
 	}
 
-	if err := utility.SaveProblemZip(file, problemId); err != nil {
+	if err := utility.SaveProblemZip(data, problemId); err != nil {
 		ctx.String(http.StatusInternalServerError, "cannot save problem zip")
 		return
 	}
@@ -104,7 +103,7 @@ func ProblemCreateOrEditHandler(ctx *gin.Context) {
 
 	success = true
 	ctx.JSON(http.StatusOK, gin.H{
-		"id":      problemId,
+		"id": problemId,
 	})
 }
 

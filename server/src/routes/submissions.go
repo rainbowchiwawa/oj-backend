@@ -7,6 +7,7 @@ import (
 	"oj/server/database"
 	"oj/server/sandbox"
 	"oj/server/utility"
+	"os"
 
 	"github.com/gin-gonic/gin"
 )
@@ -37,7 +38,9 @@ func SubmissionCreateHandler(ctx *gin.Context) {
 	}
 
 	path := sandbox.GetSubmissionPath(submission.Id.String()) + "/source.zip"
-	if err := utility.WriteFileToPath(body.File, path); err != nil {
+	data, err := utility.ToFileData(body.File)
+
+	if err := os.WriteFile(path, data.Bytes, 0777); err != nil {
 		fmt.Println(err)
 		ctx.String(http.StatusInternalServerError, "failed to write file")
 		return
