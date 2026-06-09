@@ -9,6 +9,7 @@ import (
 	"os"
 
 	"oj/server/database"
+	"oj/server/sandbox"
 	"oj/server/utility"
 
 	"github.com/gin-gonic/gin"
@@ -53,12 +54,12 @@ func ProblemCreateOrEditHandler(ctx *gin.Context) {
 	defer func() {
 		if success {
 			if !isNew {
-				utility.CleanupProblemBackup(problemId)
+				sandbox.CleanupProblemBackup(problemId)
 			}
 			return
 		}
 		// Rollback: remove partially-created new directory.
-		if cleanErr := utility.DeleteProblemDirectory(problemId); cleanErr != nil {
+		if cleanErr := sandbox.DeleteProblemDirectory(problemId); cleanErr != nil {
 			log.Printf("rollback: failed to delete problem directory %s: %v", problemId, cleanErr)
 		}
 		if isNew {
@@ -68,35 +69,35 @@ func ProblemCreateOrEditHandler(ctx *gin.Context) {
 			}
 		} else {
 			// Edit — restore old directory from backup.
-			if cleanErr := utility.RestoreProblemDirectory(problemId); cleanErr != nil {
+			if cleanErr := sandbox.RestoreProblemDirectory(problemId); cleanErr != nil {
 				log.Printf("rollback: failed to restore old problem directory %s: %v", problemId, cleanErr)
 			}
 		}
 	}()
 
 	if !isNew {
-		if err := utility.BackupProblemDirectory(problemId); err != nil {
+		if err := sandbox.BackupProblemDirectory(problemId); err != nil {
 			ctx.String(http.StatusInternalServerError, "cannot backup old problem directory")
 			return
 		}
 	}
 
-	if err := utility.CreateProblemDirectory(problemId); err != nil {
+	if err := sandbox.CreateProblemDirectory(problemId); err != nil {
 		ctx.String(http.StatusInternalServerError, "cannot create problem directory")
 		return
 	}
 
-	if err := utility.ExtractProblemFile(body.File, problemId); err != nil {
+	if err := sandbox.ExtractProblemFile(body.File, problemId); err != nil {
 		ctx.String(http.StatusInternalServerError, "cannot extract problem file: "+err.Error())
 		return
 	}
 
-	if err := utility.SaveProblemZip(data, problemId); err != nil {
+	if err := sandbox.SaveProblemZip(data, problemId); err != nil {
 		ctx.String(http.StatusInternalServerError, "cannot save problem zip")
 		return
 	}
 
-	if err := utility.CreateProblemTemplateZip(problemId); err != nil {
+	if err := sandbox.CreateProblemTemplateZip(problemId); err != nil {
 		ctx.String(http.StatusInternalServerError, "cannot create template zip")
 		return
 	}
@@ -121,14 +122,14 @@ func ProblemDeleteHandler(ctx *gin.Context) {
 	}
 
 	// Backup directory first so we can restore if DB delete fails.
-	if err := utility.BackupProblemDirectory(id); err != nil {
+	if err := sandbox.BackupProblemDirectory(id); err != nil {
 		ctx.String(http.StatusInternalServerError, "cannot backup problem directory: "+err.Error())
 		return
 	}
 
 	if err := database.DeleteProblem(id); err != nil {
 		// DB delete failed — restore directory from backup.
-		if restoreErr := utility.RestoreProblemDirectory(id); restoreErr != nil {
+		if restoreErr := sandbox.RestoreProblemDirectory(id); restoreErr != nil {
 			log.Printf("rollback: failed to restore problem directory %s: %v", id, restoreErr)
 		}
 		ctx.String(http.StatusInternalServerError, "cannot delete problem from database: "+err.Error())
@@ -136,7 +137,7 @@ func ProblemDeleteHandler(ctx *gin.Context) {
 	}
 
 	// Both succeeded — remove the backup.
-	utility.CleanupProblemBackup(id)
+	sandbox.CleanupProblemBackup(id)
 	ctx.String(http.StatusOK, "")
 }
 
@@ -193,7 +194,7 @@ func ProblemTemplateGetHandler(ctx *gin.Context) {
 		return
 	}
 
-	zipPath := utility.GetProblemFilePath(id, "template.zip")
+	zipPath := sandbox.GetProblemFilePath(id, "template.zip")
 
 	if _, err := os.Stat(zipPath); err != nil {
 		if os.IsNotExist(err) {
@@ -220,7 +221,7 @@ func ProblemTestCasesGetHandler(ctx *gin.Context) {
 		return
 	}
 
-	zipPath := utility.GetProblemFilePath(id, "problem.zip")
+	zipPath := sandbox.GetProblemFilePath(id, "problem.zip")
 
 	if _, err := os.Stat(zipPath); err != nil {
 		if os.IsNotExist(err) {

@@ -1,7 +1,8 @@
-package utility
+package sandbox
 
 import (
 	"mime/multipart"
+	"oj/server/utility"
 	"os"
 	"path/filepath"
 )
@@ -9,7 +10,7 @@ import (
 var problemsDir string
 
 func init() {
-	problemsDir = filepath.Join(EnvData.BasePath + "/problems")
+	problemsDir = filepath.Join(utility.EnvData.BasePath + "/problems")
 }
 
 func GetProblemFilePath(problemId string, filename string) string {
@@ -22,7 +23,7 @@ func CreateProblemDirectory(problemId string) error {
 }
 
 func ExtractProblemFile(file *multipart.FileHeader, problemId string) error {
-	err := ValidateZipStructure(file, []string{
+	err := utility.ValidateZipStructure(file, []string{
 		"CMakeLists.txt",
 		"settings.yaml",
 		"cmake/",
@@ -35,10 +36,10 @@ func ExtractProblemFile(file *multipart.FileHeader, problemId string) error {
 	}
 
 	destDir := filepath.Join(problemsDir, problemId)
-	return ExtractZip(file, destDir)
+	return utility.ExtractZip(file, destDir)
 }
 
-func SaveProblemZip(data FileData, problemId string) error {
+func SaveProblemZip(data utility.FileData, problemId string) error {
 	destPath := filepath.Join(problemsDir, problemId, "problem.zip")
 	err := os.WriteFile(destPath, data.Bytes, 0666)
 	return err
@@ -47,7 +48,7 @@ func SaveProblemZip(data FileData, problemId string) error {
 func CreateProblemTemplateZip(problemId string) error {
 	templateDir := filepath.Join(problemsDir, problemId, "template")
 	destZipPath := filepath.Join(problemsDir, problemId, "template.zip")
-	return CompressZip(templateDir, destZipPath)
+	return utility.CompressZip(templateDir, destZipPath)
 }
 
 func DeleteProblemDirectory(problemId string) error {
