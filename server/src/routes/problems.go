@@ -3,14 +3,12 @@ package routes
 import (
 	"errors"
 	"fmt"
-	"log"
 	"mime/multipart"
 	"net/http"
 	"os"
 
 	"oj/server/database"
 	"oj/server/sandbox"
-	"oj/server/utility"
 
 	"github.com/gin-gonic/gin"
 	"gorm.io/gorm"
@@ -37,12 +35,6 @@ func ProblemCreateOrEditHandler(ctx *gin.Context) {
 		return
 	}
 
-	data, err := utility.ToFileData(body.File)
-	if err != nil {
-		ctx.String(http.StatusBadRequest, "cannot open file")
-		return
-	}
-
 	problem, isNew, err := database.CreateOrEditProblem(body.Title, body.Description)
 	if err != nil {
 		ctx.String(http.StatusInternalServerError, "cannot create problem")
@@ -50,59 +42,12 @@ func ProblemCreateOrEditHandler(ctx *gin.Context) {
 	}
 
 	problemId := problem.Id.String()
-	success := false
-	defer func() {
-		if success {
-			if !isNew {
-				sandbox.CleanupProblemBackup(problemId)
-			}
-			return
-		}
-		// Rollback: remove partially-created new directory.
-		if cleanErr := sandbox.DeleteProblemDirectory(problemId); cleanErr != nil {
-			log.Printf("rollback: failed to delete problem directory %s: %v", problemId, cleanErr)
-		}
-		if isNew {
-			// New problem — remove the DB record too.
-			if cleanErr := database.DeleteProblem(problemId); cleanErr != nil {
-				log.Printf("rollback: failed to delete problem record %s: %v", problemId, cleanErr)
-			}
-		} else {
-			// Edit — restore old directory from backup.
-			if cleanErr := sandbox.RestoreProblemDirectory(problemId); cleanErr != nil {
-				log.Printf("rollback: failed to restore old problem directory %s: %v", problemId, cleanErr)
-			}
-		}
-	}()
-
-	if !isNew {
-		if err := sandbox.BackupProblemDirectory(problemId); err != nil {
-			ctx.String(http.StatusInternalServerError, "cannot backup old problem directory")
-			return
-		}
-	}
-
-	if err := sandbox.CreateProblemDirectory(problemId); err != nil {
-		ctx.String(http.StatusInternalServerError, "cannot create problem directory")
+	err = sandbox.SaveProblemFile(problemId, isNew, body.File, func() error { return database.DeleteProblem(problemId) })
+	if err != nil {
+		ctx.String(http.StatusInternalServerError, err.Error())
 		return
 	}
 
-	if err := sandbox.ExtractProblemFile(body.File, problemId); err != nil {
-		ctx.String(http.StatusInternalServerError, "cannot extract problem file: "+err.Error())
-		return
-	}
-
-	if err := sandbox.SaveProblemZip(data, problemId); err != nil {
-		ctx.String(http.StatusInternalServerError, "cannot save problem zip")
-		return
-	}
-
-	if err := sandbox.CreateProblemTemplateZip(problemId); err != nil {
-		ctx.String(http.StatusInternalServerError, "cannot create template zip")
-		return
-	}
-
-	success = true
 	ctx.JSON(http.StatusOK, gin.H{
 		"id": problemId,
 	})
@@ -121,23 +66,11 @@ func ProblemDeleteHandler(ctx *gin.Context) {
 		return
 	}
 
-	// Backup directory first so we can restore if DB delete fails.
-	if err := sandbox.BackupProblemDirectory(id); err != nil {
-		ctx.String(http.StatusInternalServerError, "cannot backup problem directory: "+err.Error())
+	if err = sandbox.DeleteProblemFile(id, func() error { return database.DeleteProblem(id) }); err != nil {
+		ctx.String(http.StatusInternalServerError, err.Error())
 		return
 	}
 
-	if err := database.DeleteProblem(id); err != nil {
-		// DB delete failed — restore directory from backup.
-		if restoreErr := sandbox.RestoreProblemDirectory(id); restoreErr != nil {
-			log.Printf("rollback: failed to restore problem directory %s: %v", id, restoreErr)
-		}
-		ctx.String(http.StatusInternalServerError, "cannot delete problem from database: "+err.Error())
-		return
-	}
-
-	// Both succeeded — remove the backup.
-	sandbox.CleanupProblemBackup(id)
 	ctx.String(http.StatusOK, "")
 }
 
