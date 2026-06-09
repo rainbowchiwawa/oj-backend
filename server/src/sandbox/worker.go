@@ -5,6 +5,8 @@ import (
 	"errors"
 	"fmt"
 	"io/fs"
+	"oj/server/parser"
+	"oj/server/sandbox/resources"
 	"oj/server/utility"
 	"os"
 	"path/filepath"
@@ -14,38 +16,60 @@ import (
 	"github.com/moby/moby/client"
 )
 
+type TestStatus string
+
+const (
+	StatusPending TestStatus = "pending"
+	StatusAC      TestStatus = "AC"
+	StatusWA      TestStatus = "WA"
+	StatusCE      TestStatus = "CE"
+	StatusSE      TestStatus = "SE"
+	StatusRE      TestStatus = "RE"
+	StatusTLE     TestStatus = "TLE"
+	StatusMLE     TestStatus = "MLE"
+)
+
 type CompilerOutput struct {
 	ConfigLog  *string
 	CompileLog *string
 	ExitCode   int64
 }
 
-type RunnerOutput struct {
-	OutputLog  *string
-	UserOutput *string
-	ExitCode   int64
+type WorkerOutput struct {
+	Compiler    *CompilerOutput
+	TestResults *parser.TestResults
 }
 
-type WorkerOutput struct {
-	Compiler *CompilerOutput
-	Runner   *RunnerOutput
+type Worker struct {
+	Id      string
+	Moby    *client.Client
+	Context context.Context
+	Manager resources.SubmissionManager
 }
 
 func GetSubmissionPath(submissionId string) string {
 	return filepath.Join(utility.EnvData.BasePath, "submissions", submissionId)
 }
 
-func compile(ctx context.Context, moby *client.Client, submissionId string) (CompilerOutput, error) {
+func (w Worker) Compile() (*CompilerOutput, error) {
+
+	shellCommands := []string{
+		"RUN apk add --no-cache cmake ninja-build",
+	}
 
 	config := container.Config{
 		Image:           COMPILER_IMG_NAME,
 		NetworkDisabled: true,
-		Cmd:             []string{"cmake", "-S", "src", "-B", "build", "-G", "Ninja", ">", "config.log", "2>&1", "&&", "cmake", "--build", "build", "--verbose", ">", "compile.log", "2>&1"},
-		WorkingDir:      "/workspace",
+		Cmd: []string{
+			"cmake", "-S", "src", "-B", "build", "-G", "Ninja", ">", "config.log", "2>&1", "&&",
+			"cmake", "--build", "build", "--verbose", ">", "compile.log", "2>&1",
+		},
+		WorkingDir: "/workspace",
+		Shell:      shellCommands,
 	}
 
 	hostConfig := container.HostConfig{
-		Binds: []string{fmt.Sprintf("%s/submissions/%s:/workspace", utility.EnvData.BindBasePath, submissionId)},
+		Binds: []string{fmt.Sprintf("%s/submissions/%s:/workspace", utility.EnvData.BindBasePath, w.Id)},
 		Tmpfs: map[string]string{
 			"/workspace": "rw,noexec,nosuid,size=64m",
 		},
@@ -57,69 +81,52 @@ func compile(ctx context.Context, moby *client.Client, submissionId string) (Com
 		Runtime:     "gvisor",
 	}
 
-	opt := client.ContainerCreateOptions{
-		Name:       "oj-compiler:" + submissionId,
+	options := client.ContainerCreateOptions{
+		Name:       "oj-compiler:" + w.Id,
 		Config:     &config,
 		HostConfig: &hostConfig,
 	}
 
-	createResult, err := moby.ContainerCreate(ctx, opt)
-	if err != nil {
-		return CompilerOutput{}, err
-	}
+	res, err := w.setupContainerAndRun(options)
 
-	containerId := createResult.ID
-	defer moby.ContainerRemove(ctx, containerId, client.ContainerRemoveOptions{RemoveVolumes: false})
-
-	_, err = moby.ContainerStart(ctx, containerId, client.ContainerStartOptions{})
-	if err != nil {
-		return CompilerOutput{}, err
-	}
-
-	waitResult := moby.ContainerWait(ctx, containerId, client.ContainerWaitOptions{})
-	res, err := <-waitResult.Result, <-waitResult.Error
-	if err != nil {
-		return CompilerOutput{}, err
-	}
-
-	basePath := GetSubmissionPath(submissionId)
+	basePath := w.Manager.GetBasePath()
 
 	configLogBytes, err := os.ReadFile(filepath.Join(basePath, "config.log"))
 	if err != nil {
-		return CompilerOutput{}, err
+		return nil, err
 	}
 	configLog := string(configLogBytes)
 
 	compileLogBytes, err := os.ReadFile(filepath.Join(basePath, "compile.log"))
 	if err != nil {
 		if errors.Is(err, fs.ErrNotExist) {
-			return CompilerOutput{ConfigLog: &configLog, ExitCode: res.StatusCode}, nil
+			return &CompilerOutput{ConfigLog: &configLog, ExitCode: res.StatusCode}, nil
 		}
-		return CompilerOutput{}, err
+		return nil, err
 	}
 	compileLog := string(compileLogBytes)
 
-	return CompilerOutput{ConfigLog: &configLog, CompileLog: &compileLog, ExitCode: res.StatusCode}, nil
+	return &CompilerOutput{ConfigLog: &configLog, CompileLog: &compileLog, ExitCode: res.StatusCode}, nil
 }
 
-func run(ctx context.Context, moby *client.Client, submissionId string) (RunnerOutput, error) {
+func (w Worker) Run(timeout int) (*parser.TestResults, error) {
 
 	shellCommands := []string{
-		"RUN apk add --no-cache libstdc++",
+		"RUN apk add --no-cache libstdc++ cmake",
 		"RUN adduser -D runner",
 	}
 
 	config := container.Config{
 		Image:           COMPILER_IMG_NAME,
 		NetworkDisabled: true,
-		Cmd:             []string{"$(find . -maxdepth 1 -type f -executable | head -n 1)", ">", "user_output.txt", "2>", "output.log"},
+		Cmd:             []string{"ctest", "--timeout", string(timeout), "--output-junit", "result.xml"},
 		WorkingDir:      "/workspace",
 		Shell:           shellCommands,
 		User:            "runner",
 	}
 
 	hostConfig := container.HostConfig{
-		Binds: []string{fmt.Sprintf("%s/submissions/%s/src/build:/workspace", utility.EnvData.BindBasePath, submissionId)},
+		Binds: []string{fmt.Sprintf("%s/submissions/%s/src/build:/workspace", utility.EnvData.BindBasePath, w.Id)},
 		Tmpfs: map[string]string{
 			"/workspace": "rw,noexec,nosuid,size=64m",
 		},
@@ -131,76 +138,115 @@ func run(ctx context.Context, moby *client.Client, submissionId string) (RunnerO
 		Runtime:     "gvisor",
 	}
 
-	opt := client.ContainerCreateOptions{
-		Name:       "oj-runner:" + submissionId,
+	options := client.ContainerCreateOptions{
+		Name:       "oj-runner:" + w.Id,
 		Config:     &config,
 		HostConfig: &hostConfig,
 	}
 
-	createResult, err := moby.ContainerCreate(ctx, opt)
+	_, err := w.setupContainerAndRun(options)
 	if err != nil {
-		return RunnerOutput{}, err
+		return nil, err
+	}
+
+	basePath := w.Manager.GetBasePath()
+	resultBytes, err := os.ReadFile(filepath.Join(basePath, "src/build/result.xml"))
+	if err != nil {
+		return nil, err
+	}
+	return parser.ParseTestResults(resultBytes)
+}
+
+func (w Worker) setupContainerAndRun(options client.ContainerCreateOptions) (*container.WaitResponse, error) {
+	createResult, err := w.Moby.ContainerCreate(w.Context, options)
+	if err != nil {
+		return nil, err
 	}
 
 	containerId := createResult.ID
-	defer moby.ContainerRemove(ctx, containerId, client.ContainerRemoveOptions{RemoveVolumes: false})
+	defer w.Moby.ContainerRemove(w.Context, containerId, client.ContainerRemoveOptions{RemoveVolumes: false})
 
-	_, err = moby.ContainerStart(ctx, containerId, client.ContainerStartOptions{})
+	_, err = w.Moby.ContainerStart(w.Context, containerId, client.ContainerStartOptions{})
 	if err != nil {
-		return RunnerOutput{}, err
+		return nil, err
 	}
 
-	waitResult := moby.ContainerWait(ctx, containerId, client.ContainerWaitOptions{})
+	waitResult := w.Moby.ContainerWait(w.Context, containerId, client.ContainerWaitOptions{})
 	res, err := <-waitResult.Result, <-waitResult.Error
 	if err != nil {
-		return RunnerOutput{}, err
+		return nil, err
 	}
-
-	basePath := GetSubmissionPath(submissionId)
-
-	outputLogBytes, err := os.ReadFile(filepath.Join(basePath, "output.log"))
-	if err != nil {
-		if errors.Is(err, fs.ErrNotExist) {
-			return RunnerOutput{ExitCode: res.StatusCode}, nil
-		}
-		return RunnerOutput{}, err
-	}
-	outputLog := string(outputLogBytes)
-
-	userOutputBytes, err := os.ReadFile(filepath.Join(basePath, "user_output.txt"))
-	if err != nil {
-		if errors.Is(err, fs.ErrNotExist) {
-			return RunnerOutput{ExitCode: res.StatusCode, OutputLog: &outputLog}, nil
-		}
-		return RunnerOutput{}, err
-	}
-	userOutput := string(userOutputBytes)
-
-	return RunnerOutput{ExitCode: res.StatusCode, OutputLog: &outputLog, UserOutput: &userOutput}, nil
+	return &res, nil
 }
 
-func CreateWorker(submissionId string) (WorkerOutput, error) {
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Minute)
+func CreateWorker(submissionId, problemId string, settings *parser.ProblemSettings, answer *parser.TestResults) (int, TestStatus, *WorkerOutput, error) {
+	submissionManager := resources.SubmissionManager{Id: submissionId}
+	defer submissionManager.ClearFiles()
+
+	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Minute)
 	defer cancel()
 
 	moby, err := client.New()
 	if err != nil {
-		return WorkerOutput{}, err
+		return 0, StatusPending, nil, err
+	}
+	worker := Worker{
+		Id:      submissionId,
+		Moby:    moby,
+		Context: ctx,
+		Manager: submissionManager,
 	}
 
-	compilerOutput, err := compile(ctx, moby, submissionId)
+	if err = submissionManager.CopyTestFiles(resources.ProblemManager{Id: problemId}); err != nil {
+		return 0, StatusPending, nil, err
+	}
+
+	compilerOutput, err := worker.Compile()
 	if err != nil {
-		return WorkerOutput{}, err
+		return 0, StatusPending, nil, err
 	}
 
 	if compilerOutput.ExitCode != 0 {
-		return WorkerOutput{Compiler: &compilerOutput}, nil
+		if compilerOutput.CompileLog == nil {
+			return 0, StatusSE, &WorkerOutput{Compiler: compilerOutput}, nil
+		}
+		return 0, StatusCE, &WorkerOutput{Compiler: compilerOutput}, nil
 	}
 
-	runnerOutput, err := run(ctx, moby, submissionId)
+	runnerOutput, err := worker.Run(int(settings.Limits.CPUTime / 1000))
 	if err != nil {
-		return WorkerOutput{}, err
+		return 0, StatusPending, nil, err
 	}
 
-	return WorkerOutput{Compiler: &compilerOutput, Runner: &runnerOutput}, nil
+	score := 0
+	status := StatusAC
+	for i, t := range settings.Tests {
+		testCase := runnerOutput.Testcases[i]
+		answerCase := answer.Testcases[i]
+		if (testCase.SystemOut.Content != answerCase.SystemOut.Content) ||
+			(testCase.Failure != nil && testCase.Failure.Message == "Failed") {
+			testCase.Status = string(StatusWA)
+			if status != StatusTLE && status != StatusRE {
+				status = StatusWA
+			}
+			continue
+		}
+		if testCase.Time > float64(settings.Limits.TotalTime) ||
+			(testCase.Failure != nil && testCase.Failure.Message == "Timeout") {
+			testCase.Status = string(StatusTLE)
+			if status != StatusRE {
+				status = StatusTLE
+			}
+			continue
+		}
+		if testCase.Failure == nil {
+			testCase.Status = string(StatusAC)
+			score += t.Score
+			continue
+		}
+		testCase.Status = string(StatusRE)
+		status = StatusRE
+	}
+
+	return score, status, &WorkerOutput{Compiler: compilerOutput, TestResults: runnerOutput}, nil
 }

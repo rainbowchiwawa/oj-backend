@@ -7,33 +7,19 @@ import (
 	"github.com/google/uuid"
 )
 
-type SubmissionStatus = string
-
-const (
-	StatusPending SubmissionStatus = "pending"
-	StatusAC      SubmissionStatus = "AC"
-	StatusWA      SubmissionStatus = "WA"
-	StatusCE      SubmissionStatus = "CE"
-	StatusSE      SubmissionStatus = "SE"
-	StatusRE      SubmissionStatus = "RE"
-	StatusTLE     SubmissionStatus = "TLE"
-	StatusMLE     SubmissionStatus = "MLE"
-)
-
 type Submission struct {
-	Id         uuid.UUID        `gorm:"type:uuid;primary_key;default:gen_random_uuid()" json:"id"`
-	ProblemId  uuid.UUID        `gorm:"type:uuid;not null" json:"problem_id"`
-	UserId     uuid.UUID        `gorm:"type:uuid;not null" json:"user_id"`
-	Status     SubmissionStatus `gorm:"type:varchar(16);default:'pending';index;not null" json:"status"`
-	ConfigLog  *string          `gorm:"type:text"`
-	CompileLog *string          `gorm:"type:text"`
-	OutputLog  *string          `gorm:"type:text"`
-	CreatedAt  time.Time        `gorm:"not null;default:now()" json:"created_at"`
-	UpdatedAt  time.Time        `gorm:"not null;default:now()" json:"updated_at"`
+	Id        uuid.UUID             `gorm:"type:uuid;primary_key;default:gen_random_uuid()" json:"id"`
+	ProblemId uuid.UUID             `gorm:"type:uuid;not null" json:"problem_id"`
+	UserId    uuid.UUID             `gorm:"type:uuid;not null" json:"user_id"`
+	Score     int                   `gorm:"not null;default:0" json:"score"`
+	Status    sandbox.TestStatus    `gorm:"type:varchar(16);default:'pending';index;not null" json:"status"`
+	Result    *sandbox.WorkerOutput `gorm:"type:jsonb"`
+	CreatedAt time.Time             `gorm:"not null;default:now()" json:"created_at"`
+	UpdatedAt time.Time             `gorm:"not null;default:now()" json:"updated_at"`
 }
 
 type SubmissionAggration struct {
-	Status SubmissionStatus
+	Status string
 	Count  int64
 }
 
@@ -55,38 +41,8 @@ func CreateSubmission(problemId string, userId string) (Submission, error) {
 	return newSubmission, nil
 }
 
-func UpdateSubmissionByWorkerOutput(id string, output *sandbox.WorkerOutput) (Submission, error) {
-	var newSubmission Submission
-	if output.Compiler == nil {
-		newSubmission = Submission{
-			ConfigLog:  nil,
-			CompileLog: nil,
-			OutputLog:  nil,
-			Status:     StatusPending,
-		}
-	} else if output.Runner == nil {
-		newSubmission = Submission{
-			ConfigLog:  output.Compiler.ConfigLog,
-			CompileLog: output.Compiler.CompileLog,
-			OutputLog:  nil,
-		}
-		if output.Compiler.CompileLog == nil {
-			newSubmission.Status = StatusSE
-		} else {
-			newSubmission.Status = StatusCE
-		}
-	} else {
-		newSubmission = Submission{
-			ConfigLog:  output.Compiler.ConfigLog,
-			CompileLog: output.Compiler.CompileLog,
-			OutputLog:  output.Runner.OutputLog,
-		}
-		if output.Runner.ExitCode != 0 {
-			newSubmission.Status = StatusRE
-		} else {
-			newSubmission.Status = StatusWA
-		}
-	}
+func UpdateSubmissionByWorkerOutput(id string, score int, status sandbox.TestStatus, output *sandbox.WorkerOutput) (Submission, error) {
+	newSubmission := Submission{Score: score, Status: status, Result: output}
 	if res := db.Table("submissions").Where("id = ?", id).Updates(&newSubmission); res.Error != nil {
 		return Submission{}, res.Error
 	}
@@ -111,7 +67,7 @@ func GetAllSubmissionByUserId(userId string) ([]Submission, error) {
 
 func GetStatisticByProblemId(problemId string) (map[string]int64, error) {
 	var submissions []SubmissionAggration
-	if res := db.Table("submissions").Select("Status, COUNT(*) as Count").Where("problemId = ?", problemId).Where("status <> ?", StatusPending).Group("status").Find(&submissions); res.Error != nil {
+	if res := db.Table("submissions").Select("Status, COUNT(*) as Count").Where("problemId = ?", problemId).Where("status <> ?", sandbox.StatusPending).Group("status").Find(&submissions); res.Error != nil {
 		return nil, res.Error
 	}
 	statistic := make(map[string]int64)
@@ -123,7 +79,7 @@ func GetStatisticByProblemId(problemId string) (map[string]int64, error) {
 
 func GetStatisticByUserId(userId string) (map[string]int64, error) {
 	var submissions []SubmissionAggration
-	if res := db.Table("submissions").Select("Status, COUNT(*) as Count").Where("userId = ?", userId).Where("status <> ?", StatusPending).Group("status").Find(&submissions); res.Error != nil {
+	if res := db.Table("submissions").Select("Status, COUNT(*) as Count").Where("userId = ?", userId).Where("status <> ?", sandbox.StatusPending).Group("status").Find(&submissions); res.Error != nil {
 		return nil, res.Error
 	}
 	statistic := make(map[string]int64)
@@ -131,4 +87,11 @@ func GetStatisticByUserId(userId string) (map[string]int64, error) {
 		statistic[submission.Status] = submission.Count
 	}
 	return statistic, nil
+}
+
+func DeleteSubmission(id string) error {
+	if res := db.Table("submissions").Where("id = ?", id).Delete(&Submission{}); res.Error != nil {
+		return res.Error
+	}
+	return nil
 }

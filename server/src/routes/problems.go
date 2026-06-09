@@ -5,10 +5,10 @@ import (
 	"fmt"
 	"mime/multipart"
 	"net/http"
-	"os"
 
 	"oj/server/database"
-	"oj/server/sandbox"
+	"oj/server/parser"
+	"oj/server/sandbox/resources"
 
 	"github.com/gin-gonic/gin"
 	"gorm.io/gorm"
@@ -42,15 +42,29 @@ func ProblemCreateOrEditHandler(ctx *gin.Context) {
 	}
 
 	problemId := problem.Id.String()
-	err = sandbox.SaveProblemFile(problemId, isNew, body.File, func() error { return database.DeleteProblem(problemId) })
+	err = resources.SaveUploadedProblem(
+		problemId,
+		isNew,
+		body.File,
+		func(r *parser.TestResults, s *parser.ProblemSettings) error {
+			_, err := database.UpdateProblem(problemId, r, s)
+			return err
+		},
+		func() error { return database.DeleteProblem(problemId) },
+	)
 	if err != nil {
 		ctx.String(http.StatusInternalServerError, err.Error())
 		return
 	}
 
-	ctx.JSON(http.StatusOK, gin.H{
-		"id": problemId,
-	})
+	var code int
+	if isNew {
+		code = http.StatusCreated
+	} else {
+		code = http.StatusOK
+	}
+
+	ctx.JSON(code, gin.H{"id": problemId})
 }
 
 func ProblemDeleteHandler(ctx *gin.Context) {
@@ -66,7 +80,7 @@ func ProblemDeleteHandler(ctx *gin.Context) {
 		return
 	}
 
-	if err = sandbox.DeleteProblemFile(id, func() error { return database.DeleteProblem(id) }); err != nil {
+	if err = resources.DeleteUploadedProblem(id, func() error { return database.DeleteProblem(id) }); err != nil {
 		ctx.String(http.StatusInternalServerError, err.Error())
 		return
 	}
@@ -127,14 +141,14 @@ func ProblemTemplateGetHandler(ctx *gin.Context) {
 		return
 	}
 
-	zipPath := sandbox.GetProblemFilePath(id, "template.zip")
+	zipPath, ok, err := resources.GetProblemFilePath(id, resources.ProblemTemplateZip)
+	if err != nil {
+		ctx.String(http.StatusInternalServerError, "failed to check template zip: "+err.Error())
+		return
+	}
 
-	if _, err := os.Stat(zipPath); err != nil {
-		if os.IsNotExist(err) {
-			ctx.String(http.StatusNotFound, "template zip not found")
-		} else {
-			ctx.String(http.StatusInternalServerError, "failed to check template zip: "+err.Error())
-		}
+	if !ok {
+		ctx.String(http.StatusNotFound, "template zip not found")
 		return
 	}
 
@@ -154,14 +168,14 @@ func ProblemTestCasesGetHandler(ctx *gin.Context) {
 		return
 	}
 
-	zipPath := sandbox.GetProblemFilePath(id, "problem.zip")
+	zipPath, ok, err := resources.GetProblemFilePath(id, resources.ProblemZip)
+	if err != nil {
+		ctx.String(http.StatusInternalServerError, "failed to check template zip: "+err.Error())
+		return
+	}
 
-	if _, err := os.Stat(zipPath); err != nil {
-		if os.IsNotExist(err) {
-			ctx.String(http.StatusNotFound, "problem zip not found")
-		} else {
-			ctx.String(http.StatusInternalServerError, "failed to check problem zip: "+err.Error())
-		}
+	if !ok {
+		ctx.String(http.StatusNotFound, "template zip not found")
 		return
 	}
 

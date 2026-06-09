@@ -2,16 +2,18 @@ package database
 
 import (
 	"errors"
+	"oj/server/parser"
 
 	"github.com/google/uuid"
 	"gorm.io/gorm"
 )
 
 type Problem struct {
-	Id          uuid.UUID `gorm:"type:uuid;primary_key;default:gen_random_uuid()" json:"id"`
-	Title       string    `gorm:"not null;uniqueIndex" json:"title"`
-	Description string    `gorm:"not null" json:"description"`
-	Answer      string    `gorm:"not null" json:"-"`
+	Id          uuid.UUID               `gorm:"type:uuid;primary_key;default:gen_random_uuid()" json:"id"`
+	Title       string                  `gorm:"not null;uniqueIndex" json:"title"`
+	Description string                  `gorm:"not null" json:"description"`
+	Answer      *parser.TestResults     `gorm:"type:jsonb" json:"-"`
+	Settings    *parser.ProblemSettings `gorm:"type:jsonb" json:"-"`
 }
 
 func CreateOrEditProblem(title string, description string) (Problem, bool, error) {
@@ -63,4 +65,12 @@ func GetProblems() ([]Problem, error) {
 		return nil, res.Error
 	}
 	return problems, nil
+}
+
+func UpdateProblem(id string, answer *parser.TestResults, settings *parser.ProblemSettings) (Problem, error) {
+	problem := Problem{Answer: answer, Settings: settings}
+	if res := db.Table("problems").Where("id = ?", id).Updates(&problem); res.Error != nil {
+		return Problem{}, res.Error
+	}
+	return problem, nil
 }

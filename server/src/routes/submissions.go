@@ -1,13 +1,11 @@
 package routes
 
 import (
-	"fmt"
 	"mime/multipart"
 	"net/http"
 	"oj/server/database"
 	"oj/server/sandbox"
-	"oj/server/utility"
-	"os"
+	"oj/server/sandbox/resources"
 
 	"github.com/gin-gonic/gin"
 )
@@ -37,25 +35,22 @@ func SubmissionCreateHandler(ctx *gin.Context) {
 		return
 	}
 
-	path := sandbox.GetSubmissionPath(submission.Id.String()) + "/source.zip"
-	data, err := utility.ToFileData(body.File)
-
-	if err := os.WriteFile(path, data.Bytes, 0777); err != nil {
-		fmt.Println(err)
+	submissionId := submission.Id.String()
+	err = resources.SaveUploadedSubmission(submissionId, body.File, func() error { return database.DeleteSubmission(submissionId) })
+	if err != nil {
 		ctx.String(http.StatusInternalServerError, "failed to write file")
 		return
 	}
 
 	go func() {
-		submissionId := submission.Id.String()
-		output, err := sandbox.CreateWorker(submission.Id.String())
+		score, status, output, err := sandbox.CreateWorker(submissionId, body.ProblemId, problem.Settings, problem.Answer)
 		if err != nil {
 			return
 		}
-		database.UpdateSubmissionByWorkerOutput(submissionId, &output)
+		database.UpdateSubmissionByWorkerOutput(submissionId, score, status, output)
 	}()
 
-	ctx.JSON(http.StatusCreated, submission.Id.String())
+	ctx.JSON(http.StatusCreated, gin.H{"id": submissionId})
 }
 
 func SubmissionGetAllHandler(ctx *gin.Context) {

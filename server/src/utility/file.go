@@ -2,6 +2,7 @@ package utility
 
 import (
 	"mime/multipart"
+	"os"
 )
 
 type FileData struct {
@@ -9,7 +10,7 @@ type FileData struct {
 	Size  int64
 }
 
-func ToFileData(file *multipart.FileHeader) (FileData, error) {
+func MultipartToFileData(file *multipart.FileHeader) (FileData, error) {
 	in, err := file.Open()
 	if err != nil {
 		return FileData{}, err
@@ -25,4 +26,16 @@ func ToFileData(file *multipart.FileHeader) (FileData, error) {
 		Bytes: bytes,
 		Size:  file.Size,
 	}, nil
+}
+
+func CopyFile(srcPath string, destPath string) error {
+	bytes, err := os.ReadFile(srcPath)
+	if err != nil {
+		return err
+	}
+
+	if err = os.WriteFile(destPath, bytes, os.ModePerm); err != nil {
+		return err
+	}
+	return nil
 }
