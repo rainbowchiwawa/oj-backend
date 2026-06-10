@@ -1,4 +1,4 @@
-package utility
+package archiver
 
 import (
 	"strings"

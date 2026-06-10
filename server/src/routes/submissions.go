@@ -1,6 +1,7 @@
 package routes
 
 import (
+	"fmt"
 	"mime/multipart"
 	"net/http"
 	"oj/server/database"
@@ -45,6 +46,7 @@ func SubmissionCreateHandler(ctx *gin.Context) {
 	go func() {
 		score, status, output, err := sandbox.CreateWorker(submissionId, body.ProblemId, problem.Settings, problem.Answer)
 		if err != nil {
+			fmt.Println(score, status, output, err)
 			return
 		}
 		database.UpdateSubmissionByWorkerOutput(submissionId, score, status, output)

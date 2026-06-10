@@ -14,6 +14,7 @@ type Env struct {
 	JWTSecret        string
 	BasePath         string
 	BindBasePath     string
+	ContainerPath    string
 }
 
 var EnvData Env
@@ -31,14 +32,15 @@ func InitEnv() {
 
 	inDocker := os.Getenv("RUN_ENV") == "docker"
 
-	var basePath string
-	var bindBasePath string
+	var basePath, bindBasePath, containerPath string
 	if inDocker {
 		basePath = "/app/data"
 		bindBasePath = "server_data"
+		containerPath = "/app/containers"
 	} else {
 		basePath = "../.."
 		bindBasePath = "../.."
+		containerPath = "../containers"
 	}
 
 	EnvData = Env{
@@ -50,5 +52,6 @@ func InitEnv() {
 		JWTSecret:        lookupEnv("JWT_SECRET"),
 		BasePath:         basePath,
 		BindBasePath:     bindBasePath,
+		ContainerPath:    containerPath,
 	}
 }

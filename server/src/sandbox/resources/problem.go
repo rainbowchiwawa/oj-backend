@@ -6,6 +6,7 @@ import (
 	"mime/multipart"
 	"oj/server/parser"
 	"oj/server/utility"
+	"oj/server/utility/archiver"
 	"os"
 	"path/filepath"
 )
@@ -16,8 +17,8 @@ const (
 	ProblemZip         ProblemFilePath = "problem.zip"
 	ProblemTemplateZip ProblemFilePath = "template.zip"
 	ProblemPublicDir   ProblemFilePath = "public"
-	ProblemSpec        ProblemFilePath = "spec"
 	ProblemExtractDir  ProblemFilePath = "src"
+	ProblemSpec        ProblemFilePath = "src/spec"
 	ProblemAnswer      ProblemFilePath = "src/online-judge/result.xml"
 	ProblemCMakeLists  ProblemFilePath = "src/CMakeLists.txt"
 	ProblemSettings    ProblemFilePath = "src/settings.yaml"
@@ -141,18 +142,6 @@ func (p ProblemManager) getBackupPath() string {
 }
 
 func (p ProblemManager) extractAndSave(file *multipart.FileHeader) error {
-	err := utility.ValidateZipStructure(file, []string{
-		"CMakeLists.txt",
-		"settings.yaml",
-		"spec/",
-		"online-judge/result.xml",
-		"template/entrypoint.cpp",
-		"template/test.h",
-	})
-	if err != nil {
-		return err
-	}
-
 	zipPath := p.getChildPath(ProblemZip)
 	extractPath := p.getChildPath(ProblemExtractDir)
 	if err := os.MkdirAll(extractPath, os.ModePerm); err != nil {
@@ -168,7 +157,25 @@ func (p ProblemManager) extractAndSave(file *multipart.FileHeader) error {
 		return err
 	}
 
-	return utility.ExtractZip(file, extractPath)
+	in, err := file.Open()
+	if err != nil {
+		return err
+	}
+	defer in.Close()
+
+	zr, err := archiver.NewZipReader(in, file.Size)
+	if err != nil {
+		return err
+	}
+
+	return archiver.ExtractTo(zr, extractPath, []string{
+		"CMakeLists.txt",
+		"settings.yaml",
+		"spec/",
+		"online-judge/result.xml",
+		"template/entrypoint.cpp",
+		"template/test.h",
+	})
 }
 
 func (p ProblemManager) createTemplateZip(public []parser.ProblemPublicPair) error {
@@ -181,7 +188,17 @@ func (p ProblemManager) createTemplateZip(public []parser.ProblemPublicPair) err
 	}
 	templateDir := p.getChildPath(ProblemPublicDir)
 	destZipPath := p.getChildPath(ProblemTemplateZip)
-	return utility.CompressZip(templateDir, destZipPath)
+
+	out, err := os.Create(destZipPath)
+	if err != nil {
+		return err
+	}
+	defer out.Close()
+
+	zw := archiver.NewZipWriter(out)
+	defer zw.Close()
+
+	return archiver.CompressDir(zw, templateDir)
 }
 
 func (p ProblemManager) delete() error {

@@ -3,6 +3,7 @@ package resources
 import (
 	"mime/multipart"
 	"oj/server/utility"
+	"oj/server/utility/archiver"
 	"os"
 	"path/filepath"
 )
@@ -56,28 +57,47 @@ func (s SubmissionManager) extractAndSave(file *multipart.FileHeader) error {
 		return err
 	}
 
-	return utility.ExtractZip(file, extractPath)
+	in, err := file.Open()
+	if err != nil {
+		return err
+	}
+	defer in.Close()
+
+	zr, err := archiver.NewZipReader(in, file.Size)
+	if err != nil {
+		return err
+	}
+	return archiver.ExtractTo(zr, extractPath)
 }
 
 func (s SubmissionManager) CopyTestFiles(p ProblemManager) (err error) {
 	extractDir := s.GetChildPath(SubmissionExtractDir)
 	err = utility.CopyFile(p.getChildPath(ProblemCMakeLists), filepath.Join(extractDir, "CMakeLists.txt"))
 	if err != nil {
+		println("failed to copy cmakelists", err.Error())
 		return
 	}
 
 	err = utility.CopyFile(p.getChildPath(ProblemEntryPoint), filepath.Join(extractDir, "entrypoint.cpp"))
 	if err != nil {
+		println("failed to copy entrypoint", err.Error())
 		return
 	}
 
 	err = utility.CopyFile(p.getChildPath(ProblemTestHeader), filepath.Join(extractDir, "test.h"))
 	if err != nil {
+		println("failed to copy test header", err.Error())
 		return
 	}
 
-	rootDir := s.GetBasePath()
-	return os.CopyFS(rootDir, os.DirFS(p.getChildPath(ProblemSpec)))
+	specDir := filepath.Join(s.GetBasePath(), "spec")
+	err = os.CopyFS(specDir, os.DirFS(p.getChildPath(ProblemSpec)))
+	if err != nil {
+		println("failed to copy spec dir", err.Error())
+		return
+	}
+
+	return nil
 }
 
 func (s SubmissionManager) ClearFiles() error {

@@ -14,6 +14,12 @@ services:
       - ${DB_PORT}:5432
     networks:
       - bridge
+  compiler:
+    image: oj-compiler:latest
+    build: ./compiler
+  runner:
+    image: oj-runner:latest
+    build: ./runner
   server:
     build: ./server
     restart: always

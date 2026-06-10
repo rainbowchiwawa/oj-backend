@@ -1,6 +1,7 @@
 package sandbox
 
 import (
+	"bytes"
 	"context"
 	"database/sql/driver"
 	"encoding/json"
@@ -10,6 +11,7 @@ import (
 	"oj/server/parser"
 	"oj/server/sandbox/resources"
 	"oj/server/utility"
+	"oj/server/utility/archiver"
 	"os"
 	"path/filepath"
 	"time"
@@ -67,43 +69,49 @@ func GetSubmissionPath(submissionId string) string {
 
 func (w Worker) Compile() (*CompilerOutput, error) {
 
-	shellCommands := []string{
-		"RUN apk add --no-cache cmake ninja-build",
-	}
-
 	config := container.Config{
 		Image:           COMPILER_IMG_NAME,
 		NetworkDisabled: true,
 		Cmd: []string{
-			"cmake", "-S", "src", "-B", "build", "-G", "Ninja", ">", "config.log", "2>&1", "&&",
-			"cmake", "--build", "build", "--verbose", ">", "compile.log", "2>&1",
+			"sh", "-c",
+			"cmake -S src -B build -G Ninja > config.log 2>&1 && " +
+				"cmake --build build --verbose > compile.log 2>&1",
 		},
-		WorkingDir: "/workspace",
-		Shell:      shellCommands,
+		Labels: map[string]string{"com.docker.compose.progject": "oj-compiler"},
 	}
 
 	hostConfig := container.HostConfig{
-		Binds: []string{fmt.Sprintf("%s/data/submissions/%s:/workspace", utility.EnvData.BindBasePath, w.Id)},
-		Tmpfs: map[string]string{
-			"/workspace": "rw,noexec,nosuid,size=64m",
-		},
 		Resources: container.Resources{
-			CPUCount: 1,
-			Memory:   128 << 20,
+			CPUCount: 4,
+			Memory:   2048 << 20,
 		},
 		NetworkMode: "none",
-		Runtime:     "gvisor",
 	}
 
 	options := client.ContainerCreateOptions{
-		Name:       "oj-compiler:" + w.Id,
+		Name:       "compiler-" + w.Id,
 		Config:     &config,
 		HostConfig: &hostConfig,
 	}
 
-	res, err := w.setupContainerAndRun(options)
-
 	basePath := w.Manager.GetBasePath()
+	res, err := w.setupContainerAndRun(ContainerSetupOptions{
+		CreateOptions: options,
+		HostDir:       basePath,
+		FilesToImport: []string{
+			"spec/",
+			"src/",
+		},
+		FilesToExtract: []string{
+			"build",
+			"config.log",
+			"compile.log",
+		},
+	})
+	if err != nil {
+		fmt.Println(err)
+		return nil, err
+	}
 
 	configLogBytes, err := os.ReadFile(filepath.Join(basePath, "config.log"))
 	if err != nil {
@@ -125,54 +133,56 @@ func (w Worker) Compile() (*CompilerOutput, error) {
 
 func (w Worker) Run(timeout int) (*parser.TestResults, error) {
 
-	shellCommands := []string{
-		"RUN apk add --no-cache libstdc++ cmake",
-		"RUN adduser -D runner",
-	}
-
 	config := container.Config{
 		Image:           COMPILER_IMG_NAME,
 		NetworkDisabled: true,
-		Cmd:             []string{"ctest", "--timeout", string(timeout), "--output-junit", "result.xml"},
-		WorkingDir:      "/workspace",
-		Shell:           shellCommands,
-		User:            "runner",
+		Cmd: []string{
+			"sh", "-c", fmt.Sprintf("cd build && ctest --timeout %d --output-junit result.xml", timeout),
+		},
+		Labels: map[string]string{"com.docker.compose.progject": "oj-runner"},
 	}
 
 	hostConfig := container.HostConfig{
-		Binds: []string{fmt.Sprintf("%s/data/submissions/%s/src/build:/workspace", utility.EnvData.BindBasePath, w.Id)},
-		Tmpfs: map[string]string{
-			"/workspace": "rw,noexec,nosuid,size=64m",
-		},
 		Resources: container.Resources{
-			CPUCount: 1,
-			Memory:   128 << 20,
+			CPUCount: 2,
+			Memory:   512 << 20,
 		},
 		NetworkMode: "none",
-		Runtime:     "gvisor",
 	}
 
 	options := client.ContainerCreateOptions{
-		Name:       "oj-runner:" + w.Id,
+		Name:       "runner-" + w.Id,
 		Config:     &config,
 		HostConfig: &hostConfig,
 	}
 
-	_, err := w.setupContainerAndRun(options)
+	basePath := w.Manager.GetBasePath()
+	_, err := w.setupContainerAndRun(ContainerSetupOptions{
+		CreateOptions:  options,
+		HostDir:        basePath,
+		FilesToImport:  []string{"build/"},
+		FilesToExtract: []string{"build/result.xml"},
+	})
 	if err != nil {
 		return nil, err
 	}
 
-	basePath := w.Manager.GetBasePath()
-	resultBytes, err := os.ReadFile(filepath.Join(basePath, "src/build/result.xml"))
+	resultBytes, err := os.ReadFile(filepath.Join(basePath, "build/result.xml"))
 	if err != nil {
 		return nil, err
 	}
 	return parser.ParseTestResults(resultBytes)
 }
 
-func (w Worker) setupContainerAndRun(options client.ContainerCreateOptions) (*container.WaitResponse, error) {
-	createResult, err := w.Moby.ContainerCreate(w.Context, options)
+type ContainerSetupOptions struct {
+	CreateOptions  client.ContainerCreateOptions
+	HostDir        string
+	FilesToImport  []string
+	FilesToExtract []string
+}
+
+func (w Worker) setupContainerAndRun(options ContainerSetupOptions) (*container.WaitResponse, error) {
+	createResult, err := w.Moby.ContainerCreate(w.Context, options.CreateOptions)
 	if err != nil {
 		return nil, err
 	}
@@ -180,17 +190,68 @@ func (w Worker) setupContainerAndRun(options client.ContainerCreateOptions) (*co
 	containerId := createResult.ID
 	defer w.Moby.ContainerRemove(w.Context, containerId, client.ContainerRemoveOptions{RemoveVolumes: false})
 
+	buf, err := makeTarStream(options.HostDir, options.FilesToImport)
+	if err != nil {
+		return nil, err
+	}
+
+	_, err = w.Moby.CopyToContainer(w.Context, containerId, client.CopyToContainerOptions{
+		DestinationPath: "/workspace",
+		Content:         buf,
+	})
+	if err != nil {
+		return nil, err
+	}
+
 	_, err = w.Moby.ContainerStart(w.Context, containerId, client.ContainerStartOptions{})
 	if err != nil {
 		return nil, err
 	}
 
-	waitResult := w.Moby.ContainerWait(w.Context, containerId, client.ContainerWaitOptions{})
-	res, err := <-waitResult.Result, <-waitResult.Error
+	waitResult := w.Moby.ContainerWait(w.Context, containerId, client.ContainerWaitOptions{Condition: container.WaitConditionNotRunning})
+
+	select {
+	case res := <-waitResult.Result:
+		logResult, err := w.Moby.ContainerLogs(w.Context, containerId, client.ContainerLogsOptions{
+			ShowStdout: true,
+		})
+		if err != nil {
+			return nil, err
+		}
+		stdbuf := make([]byte, 1024)
+		logResult.Read(stdbuf)
+		fmt.Println(string(stdbuf))
+		for _, f := range options.FilesToExtract {
+			copyResult, err := w.Moby.CopyFromContainer(w.Context, containerId, client.CopyFromContainerOptions{
+				SourcePath: filepath.Join("/workspace", f),
+			})
+			if err != nil {
+				return nil, err
+			}
+
+			fmt.Printf("extracting from %s->%s\n", filepath.Join("/workspace", f), filepath.Join(options.HostDir, filepath.Dir(f)))
+			tr := archiver.NewTarReader(copyResult.Content)
+			if err = archiver.ExtractTo(tr, filepath.Join(options.HostDir, filepath.Dir(f))); err != nil {
+				return nil, err
+			}
+		}
+		return &res, nil
+	case err := <-waitResult.Error:
+		return nil, err
+	}
+}
+
+func makeTarStream(srcDir string, files []string) (*bytes.Buffer, error) {
+	var buf bytes.Buffer
+	tw := archiver.NewTarWriter(&buf)
+	defer tw.Close()
+
+	err := archiver.CompressFiles(tw, srcDir, files)
 	if err != nil {
 		return nil, err
 	}
-	return &res, nil
+
+	return &buf, nil
 }
 
 func CreateWorker(
@@ -216,10 +277,12 @@ func CreateWorker(
 		Manager: submissionManager,
 	}
 
+	fmt.Println("copying test files")
 	if err = submissionManager.CopyTestFiles(resources.ProblemManager{Id: problemId}); err != nil {
 		return 0, StatusPending, nil, err
 	}
 
+	fmt.Println("compiling")
 	compilerOutput, err := worker.Compile()
 	if err != nil {
 		return 0, StatusPending, nil, err
@@ -232,6 +295,7 @@ func CreateWorker(
 		return 0, StatusCE, &WorkerOutput{Compiler: compilerOutput}, nil
 	}
 
+	fmt.Println("running")
 	runnerOutput, err := worker.Run(int(settings.Limits.CPUTime / 1000))
 	if err != nil {
 		return 0, StatusPending, nil, err
