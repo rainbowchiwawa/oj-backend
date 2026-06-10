@@ -86,12 +86,13 @@ func SubmissionGetHandler(ctx *gin.Context) {
 func SubmissionGetSourceHandler(ctx *gin.Context) {
 	submissionId := ctx.Param("submissionId")
 
-	submission, err := database.GetSubmissionById(submissionId)
+	_, err := database.GetSubmissionById(submissionId)
 	if err != nil {
 		ctx.String(http.StatusNotFound, "")
 		return
 	}
 
-	path := sandbox.GetSubmissionPath(submission.Id.String()) + "/source.zip"
+	submissionManager := resources.SubmissionManager{Id: submissionId}
+	path := submissionManager.GetChildPath(resources.SubmissionZip)
 	ctx.FileAttachment(path, "source.zip")
 }

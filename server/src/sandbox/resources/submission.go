@@ -18,12 +18,6 @@ type SubmissionManager struct {
 	Id string
 }
 
-var submissionBasePath string
-
-func init() {
-	submissionBasePath = filepath.Join(utility.EnvData.BasePath + "/submissions")
-}
-
 func SaveUploadedSubmission(submissionId string, file *multipart.FileHeader, deleteSubmission func() error) (err error) {
 	submissionManager := SubmissionManager{Id: submissionId}
 	defer func() {
@@ -42,13 +36,13 @@ func (s SubmissionManager) GetBasePath() string {
 	return filepath.Join(submissionBasePath, s.Id)
 }
 
-func (s SubmissionManager) getChildPath(childPath SubmissionChildPath) string {
+func (s SubmissionManager) GetChildPath(childPath SubmissionChildPath) string {
 	return filepath.Join(s.GetBasePath(), string(childPath))
 }
 
 func (s SubmissionManager) extractAndSave(file *multipart.FileHeader) error {
-	zipPath := s.getChildPath(SubmissionZip)
-	extractPath := s.getChildPath(SubmissionExtractDir)
+	zipPath := s.GetChildPath(SubmissionZip)
+	extractPath := s.GetChildPath(SubmissionExtractDir)
 	if err := os.MkdirAll(extractPath, os.ModePerm); err != nil {
 		return err
 	}
@@ -66,8 +60,12 @@ func (s SubmissionManager) extractAndSave(file *multipart.FileHeader) error {
 }
 
 func (s SubmissionManager) CopyTestFiles(p ProblemManager) (err error) {
+	extractDir := s.GetChildPath(SubmissionExtractDir)
+	err = utility.CopyFile(p.getChildPath(ProblemCMakeLists), filepath.Join(extractDir, "CMakeLists.txt"))
+	if err != nil {
+		return
+	}
 
-	extractDir := s.getChildPath(SubmissionExtractDir)
 	err = utility.CopyFile(p.getChildPath(ProblemEntryPoint), filepath.Join(extractDir, "entrypoint.cpp"))
 	if err != nil {
 		return

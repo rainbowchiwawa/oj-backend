@@ -3,6 +3,7 @@ package utility
 import (
 	"mime/multipart"
 	"os"
+	"path/filepath"
 )
 
 type FileData struct {
@@ -31,6 +32,10 @@ func MultipartToFileData(file *multipart.FileHeader) (FileData, error) {
 func CopyFile(srcPath string, destPath string) error {
 	bytes, err := os.ReadFile(srcPath)
 	if err != nil {
+		return err
+	}
+
+	if err = os.MkdirAll(filepath.Dir(destPath), os.ModePerm); err != nil {
 		return err
 	}
 

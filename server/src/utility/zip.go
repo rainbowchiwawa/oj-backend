@@ -37,7 +37,7 @@ func ValidateZipStructure(file *multipart.FileHeader, required []string) error {
 			}
 		}
 
-		for _, r := range requiredSet {
+		for r := range requiredSet {
 			return fmt.Errorf("invalid problem zip format: missing %s at root", r)
 		}
 		return nil

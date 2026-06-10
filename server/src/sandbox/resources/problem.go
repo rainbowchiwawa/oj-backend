@@ -23,17 +23,11 @@ const (
 	ProblemSettings    ProblemFilePath = "src/settings.yaml"
 	ProblemTemplateDir ProblemFilePath = "src/template"
 	ProblemEntryPoint  ProblemFilePath = "src/template/entrypoint.cpp"
-	ProblemTestHeader  ProblemFilePath = "src/test.h"
+	ProblemTestHeader  ProblemFilePath = "src/template/test.h"
 )
 
 type ProblemManager struct {
 	Id string
-}
-
-var problemBasePath string
-
-func init() {
-	problemBasePath = filepath.Join(utility.EnvData.BasePath + "/problems")
 }
 
 func SaveUploadedProblem(
@@ -198,6 +192,7 @@ func (p ProblemManager) delete() error {
 func (p ProblemManager) backup() error {
 	src := p.getBasePath()
 	dst := p.getBackupPath()
+	os.MkdirAll(src, os.ModePerm)
 	os.RemoveAll(dst)
 	return os.Rename(src, dst)
 }

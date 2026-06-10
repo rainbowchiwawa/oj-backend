@@ -1,6 +1,10 @@
 package parser
 
 import (
+	"database/sql/driver"
+	"encoding/json"
+	"fmt"
+
 	"gopkg.in/yaml.v2"
 )
 
@@ -24,10 +28,22 @@ type ProblemSettings struct {
 	Public []ProblemPublicPair `yaml:"public" json:"public"`
 }
 
+func (ps ProblemSettings) Value() (driver.Value, error) {
+	return json.Marshal(ps)
+}
+
+func (ps *ProblemSettings) Scan(value any) error {
+	bytes, ok := value.([]byte)
+	if !ok {
+		return fmt.Errorf("Failed to unmarshal JSONB")
+	}
+	return json.Unmarshal(bytes, ps)
+}
+
 func ParseProblemSettings(bytes []byte) (*ProblemSettings, error) {
-	var settings *ProblemSettings
-	if err := yaml.Unmarshal(bytes, settings); err != nil {
+	var settings ProblemSettings
+	if err := yaml.Unmarshal(bytes, &settings); err != nil {
 		return nil, err
 	}
-	return settings, nil
+	return &settings, nil
 }

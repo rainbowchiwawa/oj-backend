@@ -2,6 +2,7 @@ package sandbox
 
 import (
 	"fmt"
+	"oj/server/sandbox/resources"
 	"os"
 	"sync"
 
@@ -16,6 +17,8 @@ const (
 var wg sync.WaitGroup
 
 func Init() {
+	resources.Init()
+
 	moby, err := client.New()
 	if err != nil {
 		fmt.Println(err)

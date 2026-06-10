@@ -2,6 +2,8 @@ package sandbox
 
 import (
 	"context"
+	"database/sql/driver"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io/fs"
@@ -40,6 +42,18 @@ type WorkerOutput struct {
 	TestResults *parser.TestResults
 }
 
+func (wo WorkerOutput) Value() (driver.Value, error) {
+	return json.Marshal(wo)
+}
+
+func (wo *WorkerOutput) Scan(value any) error {
+	bytes, ok := value.([]byte)
+	if !ok {
+		return fmt.Errorf("Failed to unmarshal JSONB")
+	}
+	return json.Unmarshal(bytes, wo)
+}
+
 type Worker struct {
 	Id      string
 	Moby    *client.Client
@@ -69,7 +83,7 @@ func (w Worker) Compile() (*CompilerOutput, error) {
 	}
 
 	hostConfig := container.HostConfig{
-		Binds: []string{fmt.Sprintf("%s/submissions/%s:/workspace", utility.EnvData.BindBasePath, w.Id)},
+		Binds: []string{fmt.Sprintf("%s/data/submissions/%s:/workspace", utility.EnvData.BindBasePath, w.Id)},
 		Tmpfs: map[string]string{
 			"/workspace": "rw,noexec,nosuid,size=64m",
 		},
@@ -126,7 +140,7 @@ func (w Worker) Run(timeout int) (*parser.TestResults, error) {
 	}
 
 	hostConfig := container.HostConfig{
-		Binds: []string{fmt.Sprintf("%s/submissions/%s/src/build:/workspace", utility.EnvData.BindBasePath, w.Id)},
+		Binds: []string{fmt.Sprintf("%s/data/submissions/%s/src/build:/workspace", utility.EnvData.BindBasePath, w.Id)},
 		Tmpfs: map[string]string{
 			"/workspace": "rw,noexec,nosuid,size=64m",
 		},
@@ -179,7 +193,12 @@ func (w Worker) setupContainerAndRun(options client.ContainerCreateOptions) (*co
 	return &res, nil
 }
 
-func CreateWorker(submissionId, problemId string, settings *parser.ProblemSettings, answer *parser.TestResults) (int, TestStatus, *WorkerOutput, error) {
+func CreateWorker(
+	submissionId,
+	problemId string,
+	settings *parser.ProblemSettings,
+	answer *parser.TestResults,
+) (int, TestStatus, *WorkerOutput, error) {
 	submissionManager := resources.SubmissionManager{Id: submissionId}
 	defer submissionManager.ClearFiles()
 

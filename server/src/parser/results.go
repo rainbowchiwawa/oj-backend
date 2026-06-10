@@ -1,7 +1,10 @@
 package parser
 
 import (
+	"database/sql/driver"
+	"encoding/json"
 	"encoding/xml"
+	"fmt"
 	"time"
 )
 
@@ -27,6 +30,18 @@ type TestResults struct {
 			Content string `xml:",chardata" json:"content"`
 		} `xml:"system-out" json:"system_out"`
 	} `xml:"testcase" json:"testcases"`
+}
+
+func (tr TestResults) Value() (driver.Value, error) {
+	return json.Marshal(tr)
+}
+
+func (tr *TestResults) Scan(value any) error {
+	bytes, ok := value.([]byte)
+	if !ok {
+		return fmt.Errorf("Failed to unmarshal JSONB")
+	}
+	return json.Unmarshal(bytes, tr)
 }
 
 func ParseTestResults(bytes []byte) (*TestResults, error) {
