@@ -51,6 +51,18 @@ func SubmissionCreateHandler(ctx *gin.Context) {
 	ctx.JSON(http.StatusCreated, gin.H{"id": submissionId})
 }
 
+func SubmissionGetAllByUserIdHandler(ctx *gin.Context) {
+	userId := ctx.Param("id")
+
+	submissions, err := database.GetAllSubmissionByUserId(userId)
+	if err != nil {
+		ctx.String(http.StatusInternalServerError, "database error")
+		return
+	}
+
+	ctx.JSON(http.StatusOK, submissions)
+}
+
 func SubmissionGetAllHandler(ctx *gin.Context) {
 	user := GetUser(ctx)
 
@@ -117,11 +129,17 @@ func SubmissionRerunHandler(ctx *gin.Context) {
 }
 
 func SubmissionGetSourceHandler(ctx *gin.Context) {
+	user := GetUser(ctx)
 	submissionId := ctx.Param("submissionId")
 
-	_, err := database.GetSubmissionById(submissionId)
+	submission, err := database.GetSubmissionById(submissionId)
 	if err != nil {
 		ctx.String(http.StatusNotFound, "")
+		return
+	}
+
+	if submission.UserId.String() != user.UserId && user.UserType != database.TypeAdmin {
+		ctx.String(http.StatusForbidden, "Permission denied")
 		return
 	}
 

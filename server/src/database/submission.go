@@ -59,7 +59,7 @@ func GetSubmissionById(id string) (Submission, error) {
 
 func GetAllSubmissionByUserId(userId string) ([]Submission, error) {
 	var submissions []Submission
-	if res := db.Table("submissions").Select("Id", "ProblemId", "UserId", "Status").Where("user_id = ?", userId).Find(&submissions).Order("created_at desc"); res.Error != nil {
+	if res := db.Table("submissions").Select("Id", "ProblemId", "UserId", "Status", "Score").Where("user_id = ?", userId).Find(&submissions).Order("created_at desc"); res.Error != nil {
 		return nil, res.Error
 	}
 	return submissions, nil
@@ -67,7 +67,7 @@ func GetAllSubmissionByUserId(userId string) ([]Submission, error) {
 
 func GetStatisticByProblemId(problemId string) (map[string]int64, error) {
 	var submissions []SubmissionAggration
-	if res := db.Table("submissions").Select("Status, COUNT(*) as Count").Where("problemId = ?", problemId).Where("status <> ?", sandbox.StatusPending).Group("status").Find(&submissions); res.Error != nil {
+	if res := db.Table("submissions").Select("Status, COUNT(*) as Count").Where("problem_id = ?", problemId).Where("status <> ?", sandbox.StatusPending).Group("status").Find(&submissions); res.Error != nil {
 		return nil, res.Error
 	}
 	statistic := make(map[string]int64)
@@ -79,7 +79,7 @@ func GetStatisticByProblemId(problemId string) (map[string]int64, error) {
 
 func GetStatisticByUserId(userId string) (map[string]int64, error) {
 	var submissions []SubmissionAggration
-	if res := db.Table("submissions").Select("Status, COUNT(*) as Count").Where("userId = ?", userId).Where("status <> ?", sandbox.StatusPending).Group("status").Find(&submissions); res.Error != nil {
+	if res := db.Table("submissions").Select("Status, COUNT(*) as Count").Where("user_id = ?", userId).Where("status <> ?", sandbox.StatusPending).Group("status").Find(&submissions); res.Error != nil {
 		return nil, res.Error
 	}
 	statistic := make(map[string]int64)

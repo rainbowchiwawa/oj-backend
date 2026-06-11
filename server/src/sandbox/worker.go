@@ -34,6 +34,7 @@ const (
 	StatusRE      TestStatus = "RE"
 	StatusTLE     TestStatus = "TLE"
 	StatusMLE     TestStatus = "MLE"
+	StatusError   TestStatus = "E"
 )
 
 type CompilerOutput struct {
@@ -80,7 +81,7 @@ func (w Worker) compile() (*CompilerOutput, error) {
 		NetworkDisabled: true,
 		Cmd: []string{
 			"sh", "-c",
-			"cmake -S src -B build -G Ninja > config.log 2>&1 && " +
+			"cmake -S src -B build -G Ninja -DCMAKE_EXE_LINKER_FLAGS=\"-static\" > config.log 2>&1 && " +
 				"cmake --build build --verbose > compile.log 2>&1",
 		},
 		Labels: map[string]string{"com.docker.compose.progject": "oj-compiler"},
@@ -139,10 +140,10 @@ func (w Worker) compile() (*CompilerOutput, error) {
 func (w Worker) run(timeout int) (*parser.TestResults, error) {
 
 	config := container.Config{
-		Image:           COMPILER_IMG_NAME,
+		Image:           RUNNER_IMG_NAME,
 		NetworkDisabled: true,
 		Cmd: []string{
-			"sh", "-c", fmt.Sprintf("cd build && ctest --timeout %d --output-junit result.xml", timeout),
+			"sh", "-c", fmt.Sprintf("cp -r build build_app && cd build_app && ctest --timeout %d --output-junit result.xml", timeout),
 		},
 		Labels: map[string]string{"com.docker.compose.progject": "oj-runner"},
 	}
@@ -166,13 +167,13 @@ func (w Worker) run(timeout int) (*parser.TestResults, error) {
 		CreateOptions: options,
 		HostDir:       basePath,
 		FilesToImport: []string{"build/"},
-		FilesToRead:   []string{"build/result.xml"},
+		FilesToRead:   []string{"build_app/result.xml"},
 	})
 	if err != nil {
 		return nil, err
 	}
 
-	resultBytes, exists := res.FileBytes["build/result.xml"]
+	resultBytes, exists := res.FileBytes["build_app/result.xml"]
 	if !exists {
 		return nil, fmt.Errorf("result.xml not exists")
 	}
@@ -244,6 +245,7 @@ func (w Worker) setupContainerAndRun(options ContainerSetupOptions) (*ContainerR
 	case res := <-waitResult.Result:
 		logResult, err := w.Moby.ContainerLogs(w.Context, containerId, client.ContainerLogsOptions{
 			ShowStdout: true,
+			ShowStderr: true,
 		})
 		if err != nil {
 			return nil, err
@@ -343,8 +345,27 @@ func createWorker(payload WorkerInput) (*WorkerOutput, error) {
 	score := 0
 	status := StatusAC
 	for i, t := range payload.Settings.Tests {
-		testCase := runnerOutput.Testcases[i]
+		testCase := &runnerOutput.Testcases[i]
 		answerCase := payload.Answer.Testcases[i]
+
+		// 1. Check for TLE
+		if (testCase.Failure != nil && testCase.Failure.Message == "Timeout") ||
+			testCase.Time > float64(payload.Settings.Limits.TotalTime)/1000.0 {
+			testCase.Status = string(StatusTLE)
+			if status != StatusRE {
+				status = StatusTLE
+			}
+			continue
+		}
+
+		// 2. Check for RE
+		if testCase.Failure != nil && testCase.Failure.Message != "Failed" {
+			testCase.Status = string(StatusRE)
+			status = StatusRE
+			continue
+		}
+
+		// 3. Check for WA
 		if (testCase.SystemOut.Content != answerCase.SystemOut.Content) ||
 			(testCase.Failure != nil && testCase.Failure.Message == "Failed") {
 			testCase.Status = string(StatusWA)
@@ -353,19 +374,14 @@ func createWorker(payload WorkerInput) (*WorkerOutput, error) {
 			}
 			continue
 		}
-		if testCase.Time > float64(payload.Settings.Limits.TotalTime) ||
-			(testCase.Failure != nil && testCase.Failure.Message == "Timeout") {
-			testCase.Status = string(StatusTLE)
-			if status != StatusRE {
-				status = StatusTLE
-			}
-			continue
-		}
+
+		// 4. Check for AC
 		if testCase.Failure == nil {
 			testCase.Status = string(StatusAC)
 			score += t.Score
 			continue
 		}
+
 		testCase.Status = string(StatusRE)
 		status = StatusRE
 	}

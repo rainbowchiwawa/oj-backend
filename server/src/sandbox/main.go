@@ -30,9 +30,16 @@ func PopResult() WorkerOutput {
 func consume() {
 	release := acquire()
 	defer release()
-	output, err := createWorker(<-jobQueue)
+	input := <-jobQueue
+	output, err := createWorker(input)
 	if err != nil {
-		fmt.Println("worker id:", output.SubmissionId, err)
+		fmt.Println("worker error:", err)
+		outputQueue <- WorkerOutput{
+			SubmissionId: input.SubmissionId,
+			Score:        0,
+			Status:       StatusError,
+			Output:       &WorkerLogs{},
+		}
 		return
 	}
 	outputQueue <- *output

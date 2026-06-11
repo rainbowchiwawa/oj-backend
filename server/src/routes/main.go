@@ -23,6 +23,7 @@ func Init() {
 	{
 		users := api.Group("/users")
 		{
+			users.GET("/:id/submissions", SubmissionGetAllByUserIdHandler)
 			users.POST("/register", UserRegisterHandler)
 			users.POST("/login", userAuth.LoginHandler)
 		}

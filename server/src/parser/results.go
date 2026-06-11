@@ -5,26 +5,25 @@ import (
 	"encoding/json"
 	"encoding/xml"
 	"fmt"
-	"time"
 )
 
 type TestResults struct {
 	XMLName   xml.Name  `xml:"testsuite" json:"-"`
-	Name      string    `xml:"name" json:"name"`
-	Tests     int       `xml:"tests" json:"-"`
-	Failures  int       `xml:"failures" json:"-"`
-	Disabled  int       `xml:"disabled" json:"-"`
-	Skipped   int       `xml:"skipped" json:"-"`
-	Hostname  string    `xml:"hostname" json:"-"`
-	Time      int       `xml:"time" json:"time"`
-	Timestamp time.Time `xml:"timestamp" json:"-"`
+	Name      string    `xml:"name,attr" json:"name"`
+	Tests     int       `xml:"tests,attr" json:"-"`
+	Failures  int       `xml:"failures,attr" json:"-"`
+	Disabled  int       `xml:"disabled,attr" json:"-"`
+	Skipped   int       `xml:"skipped,attr" json:"-"`
+	Hostname  string    `xml:"hostname,attr" json:"-"`
+	Time      int       `xml:"time,attr" json:"time"`
+	Timestamp string    `xml:"timestamp,attr" json:"-"`
 	Testcases []struct {
-		Name      string  `xml:"name" json:"name"`
-		ClassName string  `xml:"classname" json:"-"`
-		Time      float64 `xml:"time" json:"time"`
-		Status    string  `xml:"status" json:"status"`
+		Name      string  `xml:"name,attr" json:"name"`
+		ClassName string  `xml:"classname,attr" json:"-"`
+		Time      float64 `xml:"time,attr" json:"time"`
+		Status    string  `xml:"status,attr" json:"status"`
 		Failure   *struct {
-			Message string `xml:"message" json:"message"`
+			Message string `xml:"message,attr" json:"message"`
 		} `xml:"failure" json:"failure"`
 		SystemOut struct {
 			Content string `xml:",chardata" json:"content"`
