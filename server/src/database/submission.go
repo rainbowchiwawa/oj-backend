@@ -13,7 +13,7 @@ type Submission struct {
 	UserId    uuid.UUID             `gorm:"type:uuid;not null" json:"user_id"`
 	Score     int                   `gorm:"not null;default:0" json:"score"`
 	Status    sandbox.TestStatus    `gorm:"type:varchar(16);default:'pending';index;not null" json:"status"`
-	Result    *sandbox.WorkerOutput `gorm:"type:jsonb"`
+	Result    *sandbox.WorkerOutput `gorm:"type:jsonb" json:"result"`
 	CreatedAt time.Time             `gorm:"not null;default:now()" json:"created_at"`
 	UpdatedAt time.Time             `gorm:"not null;default:now()" json:"updated_at"`
 }

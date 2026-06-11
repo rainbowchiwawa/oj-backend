@@ -32,14 +32,14 @@ const (
 )
 
 type CompilerOutput struct {
-	ConfigLog  *string
-	CompileLog *string
-	ExitCode   int64
+	ConfigLog  *string `json:"config_log"`
+	CompileLog *string `json:"compile_log"`
+	ExitCode   int64   `json:"exit_code"`
 }
 
 type WorkerOutput struct {
-	Compiler    *CompilerOutput
-	TestResults *parser.TestResults
+	Compiler    *CompilerOutput     `json:"compiler"`
+	TestResults *parser.TestResults `json:"test_results"`
 }
 
 func (wo WorkerOutput) Value() (driver.Value, error) {
@@ -80,7 +80,7 @@ func (w Worker) Compile() (*CompilerOutput, error) {
 
 	hostConfig := container.HostConfig{
 		Resources: container.Resources{
-			CPUCount: 4,
+			CPUCount: 2,
 			Memory:   2048 << 20,
 		},
 		NetworkMode: "none",
@@ -141,8 +141,8 @@ func (w Worker) Run(timeout int) (*parser.TestResults, error) {
 
 	hostConfig := container.HostConfig{
 		Resources: container.Resources{
-			CPUCount: 2,
-			Memory:   512 << 20,
+			CPUCount: 1,
+			Memory:   128 << 20,
 		},
 		NetworkMode: "none",
 	}

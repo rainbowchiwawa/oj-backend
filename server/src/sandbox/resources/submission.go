@@ -93,6 +93,8 @@ func (s SubmissionManager) CopyTestFiles(p ProblemManager) (err error) {
 		return
 	}
 
+	os.Remove(filepath.Join(extractDir, "case.h"))
+
 	specDir := filepath.Join(s.GetBasePath(), "spec")
 	err = os.CopyFS(specDir, os.DirFS(p.getChildPath(ProblemSpec)))
 	if err != nil {
