@@ -1,14 +1,47 @@
 package sandbox
 
-import (
-	"oj/server/sandbox/resources"
-)
+import "fmt"
 
 const (
 	COMPILER_IMG_NAME = "oj-compiler:latest"
 	RUNNER_IMG_NAME   = "oj-runner:latest"
+	MAX_JOB_COUNT     = 20
+	MAX_WORKER_COUNT  = 5
 )
 
-func Init() {
-	resources.Init()
+var updater func(WorkerOutput)
+var jobQueue = make(chan WorkerInput, MAX_JOB_COUNT)
+var outputQueue = make(chan WorkerOutput)
+var semaphore = make(chan struct{}, MAX_WORKER_COUNT)
+
+func acquire() func() {
+	semaphore <- struct{}{}
+	return func() { <-semaphore }
+}
+
+func PushJob(payload WorkerInput) {
+	jobQueue <- payload
+}
+
+func PopResult() WorkerOutput {
+	return <-outputQueue
+}
+
+func consume() {
+	release := acquire()
+	defer release()
+	output, err := createWorker(<-jobQueue)
+	if err != nil {
+		fmt.Println("worker id:", output.SubmissionId, err)
+		return
+	}
+	outputQueue <- *output
+}
+
+func init() {
+	go func() {
+		for {
+			consume()
+		}
+	}()
 }

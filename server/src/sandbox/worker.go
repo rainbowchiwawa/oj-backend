@@ -9,14 +9,19 @@ import (
 	"io"
 	"oj/server/parser"
 	"oj/server/sandbox/resources"
-	"oj/server/utility"
 	"oj/server/utility/archiver"
-	"path/filepath"
 	"time"
 
 	"github.com/moby/moby/api/types/container"
 	"github.com/moby/moby/client"
 )
+
+type WorkerOutput struct {
+	SubmissionId string
+	Score        int
+	Status       TestStatus
+	Output       *WorkerLogs
+}
 
 type TestStatus string
 
@@ -37,21 +42,28 @@ type CompilerOutput struct {
 	ExitCode   int64   `json:"exit_code"`
 }
 
-type WorkerOutput struct {
+type WorkerInput struct {
+	ProblemId    string
+	SubmissionId string
+	Settings     *parser.ProblemSettings
+	Answer       *parser.TestResults
+}
+
+type WorkerLogs struct {
 	Compiler    *CompilerOutput     `json:"compiler"`
 	TestResults *parser.TestResults `json:"test_results"`
 }
 
-func (wo WorkerOutput) Value() (driver.Value, error) {
-	return json.Marshal(wo)
+func (w WorkerLogs) Value() (driver.Value, error) {
+	return json.Marshal(w)
 }
 
-func (wo *WorkerOutput) Scan(value any) error {
+func (w *WorkerLogs) Scan(value any) error {
 	bytes, ok := value.([]byte)
 	if !ok {
 		return fmt.Errorf("Failed to unmarshal JSONB")
 	}
-	return json.Unmarshal(bytes, wo)
+	return json.Unmarshal(bytes, w)
 }
 
 type Worker struct {
@@ -61,11 +73,7 @@ type Worker struct {
 	Manager resources.SubmissionManager
 }
 
-func GetSubmissionPath(submissionId string) string {
-	return filepath.Join(utility.EnvData.BasePath, "submissions", submissionId)
-}
-
-func (w Worker) Compile() (*CompilerOutput, error) {
+func (w Worker) compile() (*CompilerOutput, error) {
 
 	config := container.Config{
 		Image:           COMPILER_IMG_NAME,
@@ -128,7 +136,7 @@ func (w Worker) Compile() (*CompilerOutput, error) {
 	return &CompilerOutput{ConfigLog: &configLog, CompileLog: &compileLog, ExitCode: res.ExitCode}, nil
 }
 
-func (w Worker) Run(timeout int) (*parser.TestResults, error) {
+func (w Worker) run(timeout int) (*parser.TestResults, error) {
 
 	config := container.Config{
 		Image:           COMPILER_IMG_NAME,
@@ -287,13 +295,11 @@ func (w Worker) setupContainerAndRun(options ContainerSetupOptions) (*ContainerR
 	}
 }
 
-func CreateWorker(
-	submissionId,
-	problemId string,
-	settings *parser.ProblemSettings,
-	answer *parser.TestResults,
-) (int, TestStatus, *WorkerOutput, error) {
-	submissionManager := resources.SubmissionManager{Id: submissionId}
+func createWorker(payload WorkerInput) (*WorkerOutput, error) {
+	submissionManager := resources.SubmissionManager{Id: payload.SubmissionId}
+	if err := submissionManager.ExtractZip(); err != nil {
+		return nil, err
+	}
 	defer submissionManager.ClearFiles()
 
 	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Minute)
@@ -301,44 +307,44 @@ func CreateWorker(
 
 	moby, err := client.New()
 	if err != nil {
-		return 0, StatusPending, nil, err
+		return nil, err
 	}
 	worker := Worker{
-		Id:      submissionId,
+		Id:      payload.SubmissionId,
 		Moby:    moby,
 		Context: ctx,
 		Manager: submissionManager,
 	}
 
 	fmt.Println("copying test files")
-	if err = submissionManager.CopyTestFiles(resources.ProblemManager{Id: problemId}); err != nil {
-		return 0, StatusPending, nil, err
+	if err = submissionManager.CopyTestFiles(resources.ProblemManager{Id: payload.ProblemId}); err != nil {
+		return nil, err
 	}
 
 	fmt.Println("compiling")
-	compilerOutput, err := worker.Compile()
+	compilerOutput, err := worker.compile()
 	if err != nil {
-		return 0, StatusPending, nil, err
+		return nil, err
 	}
 
 	if compilerOutput.ExitCode != 0 {
 		if compilerOutput.CompileLog == nil {
-			return 0, StatusSE, &WorkerOutput{Compiler: compilerOutput}, nil
+			return &WorkerOutput{payload.SubmissionId, 0, StatusSE, &WorkerLogs{Compiler: compilerOutput}}, nil
 		}
-		return 0, StatusCE, &WorkerOutput{Compiler: compilerOutput}, nil
+		return &WorkerOutput{payload.SubmissionId, 0, StatusCE, &WorkerLogs{Compiler: compilerOutput}}, nil
 	}
 
 	fmt.Println("running")
-	runnerOutput, err := worker.Run(int(settings.Limits.CPUTime / 1000))
+	runnerOutput, err := worker.run(int(payload.Settings.Limits.CPUTime / 1000))
 	if err != nil {
-		return 0, StatusPending, nil, err
+		return nil, err
 	}
 
 	score := 0
 	status := StatusAC
-	for i, t := range settings.Tests {
+	for i, t := range payload.Settings.Tests {
 		testCase := runnerOutput.Testcases[i]
-		answerCase := answer.Testcases[i]
+		answerCase := payload.Answer.Testcases[i]
 		if (testCase.SystemOut.Content != answerCase.SystemOut.Content) ||
 			(testCase.Failure != nil && testCase.Failure.Message == "Failed") {
 			testCase.Status = string(StatusWA)
@@ -347,7 +353,7 @@ func CreateWorker(
 			}
 			continue
 		}
-		if testCase.Time > float64(settings.Limits.TotalTime) ||
+		if testCase.Time > float64(payload.Settings.Limits.TotalTime) ||
 			(testCase.Failure != nil && testCase.Failure.Message == "Timeout") {
 			testCase.Status = string(StatusTLE)
 			if status != StatusRE {
@@ -364,5 +370,5 @@ func CreateWorker(
 		status = StatusRE
 	}
 
-	return score, status, &WorkerOutput{Compiler: compilerOutput, TestResults: runnerOutput}, nil
+	return &WorkerOutput{payload.SubmissionId, score, status, &WorkerLogs{Compiler: compilerOutput, TestResults: runnerOutput}}, nil
 }

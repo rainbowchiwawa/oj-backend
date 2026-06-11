@@ -50,6 +50,7 @@ func Init() {
 			submissionsAuthed.POST("", SubmissionCreateHandler)
 			submissionsAuthed.GET("", SubmissionGetAllHandler)
 			submissionsAuthed.GET("/:submissionId", SubmissionGetHandler)
+			submissionsAuthed.POST("/:submissionId", SubmissionRerunHandler)
 			submissionsAuthed.GET("/:submissionId/source", SubmissionGetSourceHandler)
 		}
 

@@ -8,14 +8,14 @@ import (
 )
 
 type Submission struct {
-	Id        uuid.UUID             `gorm:"type:uuid;primary_key;default:gen_random_uuid()" json:"id"`
-	ProblemId uuid.UUID             `gorm:"type:uuid;not null" json:"problem_id"`
-	UserId    uuid.UUID             `gorm:"type:uuid;not null" json:"user_id"`
-	Score     int                   `gorm:"not null;default:0" json:"score"`
-	Status    sandbox.TestStatus    `gorm:"type:varchar(16);default:'pending';index;not null" json:"status"`
-	Result    *sandbox.WorkerOutput `gorm:"type:jsonb" json:"result"`
-	CreatedAt time.Time             `gorm:"not null;default:now()" json:"created_at"`
-	UpdatedAt time.Time             `gorm:"not null;default:now()" json:"updated_at"`
+	Id        uuid.UUID           `gorm:"type:uuid;primary_key;default:gen_random_uuid()" json:"id"`
+	ProblemId uuid.UUID           `gorm:"type:uuid;not null" json:"problem_id"`
+	UserId    uuid.UUID           `gorm:"type:uuid;not null" json:"user_id"`
+	Score     int                 `gorm:"not null;default:0" json:"score"`
+	Status    sandbox.TestStatus  `gorm:"type:varchar(16);default:'pending';index;not null" json:"status"`
+	Result    *sandbox.WorkerLogs `gorm:"type:jsonb" json:"result"`
+	CreatedAt time.Time           `gorm:"not null;default:now()" json:"created_at"`
+	UpdatedAt time.Time           `gorm:"not null;default:now()" json:"updated_at"`
 }
 
 type SubmissionAggration struct {
@@ -41,7 +41,7 @@ func CreateSubmission(problemId string, userId string) (Submission, error) {
 	return newSubmission, nil
 }
 
-func UpdateSubmissionByWorkerOutput(id string, score int, status sandbox.TestStatus, output *sandbox.WorkerOutput) (Submission, error) {
+func UpdateSubmissionWithWorkerOutput(id string, score int, status sandbox.TestStatus, output *sandbox.WorkerLogs) (Submission, error) {
 	newSubmission := Submission{Score: score, Status: status, Result: output}
 	if res := db.Table("submissions").Where("id = ?", id).Updates(&newSubmission); res.Error != nil {
 		return Submission{}, res.Error

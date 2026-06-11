@@ -2,6 +2,7 @@ package database
 
 import (
 	"fmt"
+	"oj/server/sandbox"
 	"oj/server/utility"
 	"os"
 
@@ -36,4 +37,13 @@ func Init() {
 	}
 
 	fmt.Println("db ok")
+	go func() {
+		for {
+			result := sandbox.PopResult()
+			_, err := UpdateSubmissionWithWorkerOutput(result.SubmissionId, result.Score, result.Status, result.Output)
+			if err != nil {
+				fmt.Println(err)
+			}
+		}
+	}()
 }

@@ -130,7 +130,7 @@ func GetProblemFilePath(problemId string, childPath ProblemFilePath) (string, bo
 }
 
 func (p ProblemManager) getBasePath() string {
-	return filepath.Join(problemBasePath, p.Id)
+	return filepath.Join(utility.EnvData.ProblemBasePath, p.Id)
 }
 
 func (p ProblemManager) getChildPath(relPath ProblemFilePath) string {
@@ -138,7 +138,7 @@ func (p ProblemManager) getChildPath(relPath ProblemFilePath) string {
 }
 
 func (p ProblemManager) getBackupPath() string {
-	return filepath.Join(problemBasePath, p.Id+".bak")
+	return filepath.Join(utility.EnvData.ProblemBasePath, p.Id+".bak")
 }
 
 func (p ProblemManager) extractAndSave(file *multipart.FileHeader) error {

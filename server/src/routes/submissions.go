@@ -1,7 +1,6 @@
 package routes
 
 import (
-	"fmt"
 	"mime/multipart"
 	"net/http"
 	"oj/server/database"
@@ -43,15 +42,12 @@ func SubmissionCreateHandler(ctx *gin.Context) {
 		return
 	}
 
-	go func() {
-		score, status, output, err := sandbox.CreateWorker(submissionId, body.ProblemId, problem.Settings, problem.Answer)
-		if err != nil {
-			fmt.Println(score, status, output, err)
-			return
-		}
-		database.UpdateSubmissionByWorkerOutput(submissionId, score, status, output)
-	}()
-
+	sandbox.PushJob(sandbox.WorkerInput{
+		ProblemId:    problem.Id.String(),
+		SubmissionId: submissionId,
+		Settings:     problem.Settings,
+		Answer:       problem.Answer,
+	})
 	ctx.JSON(http.StatusCreated, gin.H{"id": submissionId})
 }
 
@@ -83,6 +79,41 @@ func SubmissionGetHandler(ctx *gin.Context) {
 	}
 
 	ctx.JSON(http.StatusOK, submission)
+}
+
+func SubmissionRerunHandler(ctx *gin.Context) {
+	user := GetUser(ctx)
+	submissionId := ctx.Param("submissionId")
+
+	submission, err := database.GetSubmissionById(submissionId)
+	if err != nil {
+		ctx.String(http.StatusNotFound, "")
+		return
+	}
+
+	if submission.UserId.String() != user.UserId {
+		ctx.String(http.StatusForbidden, "")
+		return
+	}
+
+	if submission.Status == sandbox.StatusPending {
+		ctx.String(http.StatusConflict, "the test is still running")
+		return
+	}
+
+	problem, err := database.GetProblemById(submission.ProblemId.String())
+	if err != nil {
+		ctx.String(http.StatusNotFound, "")
+		return
+	}
+
+	sandbox.PushJob(sandbox.WorkerInput{
+		ProblemId:    problem.Id.String(),
+		SubmissionId: submissionId,
+		Settings:     problem.Settings,
+		Answer:       problem.Answer,
+	})
+	ctx.String(http.StatusOK, "")
 }
 
 func SubmissionGetSourceHandler(ctx *gin.Context) {
