@@ -168,13 +168,28 @@ func (p ProblemManager) extractAndSave(file *multipart.FileHeader) error {
 		return err
 	}
 
-	return archiver.ExtractTo(zr, extractPath, []string{
+	requiredSet := make(map[string]struct{})
+	for _, r := range []string{
 		"CMakeLists.txt",
 		"settings.yaml",
 		"spec/",
 		"online-judge/result.xml",
 		"template/entrypoint.cpp",
 		"template/test.h",
+	} {
+		requiredSet[r] = struct{}{}
+	}
+	return archiver.ExtractTo(zr, extractPath, "", func(entry archiver.ExtractEntry) error {
+		if _, exists := requiredSet[entry.Name]; exists {
+			delete(requiredSet, entry.Name)
+			return entry.Extract()
+		}
+		for r := range requiredSet {
+			if entry.Test(r) {
+				delete(requiredSet, r)
+			}
+		}
+		return entry.Extract()
 	})
 }
 
@@ -198,7 +213,7 @@ func (p ProblemManager) createTemplateZip(public []parser.ProblemPublicPair) err
 	zw := archiver.NewZipWriter(out)
 	defer zw.Close()
 
-	return archiver.CompressDir(zw, templateDir)
+	return archiver.CompressDir(zw, templateDir, nil)
 }
 
 func (p ProblemManager) delete() error {

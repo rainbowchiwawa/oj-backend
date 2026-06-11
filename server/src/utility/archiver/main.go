@@ -1,6 +1,7 @@
 package archiver
 
 import (
+	"bytes"
 	"fmt"
 	"io"
 	"io/fs"
@@ -27,40 +28,20 @@ type Reader interface {
 	Next() (FileHeader, io.Reader, error)
 }
 
-func CompressFiles(w Writer, basePath string, files []string) error {
-	for _, f := range files {
-		abs := filepath.Join(basePath, f)
-		info, err := os.Stat(abs)
-		if err != nil {
-			return err
-		}
+type PathTestFunc func(string) bool
 
-		if info.IsDir() {
-			err = filepath.Walk(abs, func(path string, info fs.FileInfo, err error) error {
-				if err != nil {
-					return err
-				}
-
-				rel, err := filepath.Rel(basePath, path)
-				if err != nil || rel == "." {
-					return err
-				}
-
-				return compressEntry(w, path, rel, info)
-			})
-			if err != nil {
-				return err
-			}
-		} else {
-			if err := compressEntry(w, abs, f, info); err != nil {
-				return err
-			}
-		}
-	}
-	return nil
+func isPathMatch(name string, path string) bool {
+	return name == path || strings.HasSuffix(name, "/") && strings.HasPrefix(path, name)
 }
 
-func CompressDir(w Writer, srcDir string) error {
+type CompressEntry struct {
+	Name     string
+	Test     PathTestFunc
+	Compress CompressFunc
+}
+type CompressFunc func() error
+
+func CompressDir(w Writer, srcDir string, cb func(CompressEntry) error) error {
 	return filepath.Walk(srcDir, func(path string, info fs.FileInfo, err error) error {
 		if err != nil {
 			return err
@@ -69,6 +50,14 @@ func CompressDir(w Writer, srcDir string) error {
 		rel, err := filepath.Rel(srcDir, path)
 		if err != nil || rel == "." {
 			return err
+		}
+
+		if cb != nil {
+			return cb(CompressEntry{
+				Name:     filepath.ToSlash(rel),
+				Test:     func(name string) bool { return isPathMatch(name, filepath.ToSlash(rel)) },
+				Compress: func() error { return compressEntry(w, path, rel, info) },
+			})
 		}
 
 		return compressEntry(w, path, rel, info)
@@ -98,18 +87,16 @@ func compressEntry(w Writer, abs, rel string, info fs.FileInfo) error {
 	return w.WriteFile(h, in)
 }
 
-func ExtractTo(r Reader, destDir string, options ...[]string) error {
-	requiredSet := make(map[string]struct{})
-	var required []string
-	if len(options) > 0 {
-		required = options[0]
-	} else {
-		required = []string{}
-	}
-	for _, r := range required {
-		requiredSet[r] = struct{}{}
-	}
+type ExtractEntry struct {
+	Name    string
+	Test    PathTestFunc
+	Extract ExtractFunc
+	Read    ReadFunc
+}
+type ExtractFunc func() error
+type ReadFunc func() ([]byte, error)
 
+func ExtractTo(r Reader, destDir, root string, cb func(ExtractEntry) error) error {
 	for {
 		header, content, err := r.Next()
 		if err == io.EOF {
@@ -118,41 +105,60 @@ func ExtractTo(r Reader, destDir string, options ...[]string) error {
 		if err != nil {
 			return err
 		}
-
-		delete(requiredSet, header.Name)
-		for _, r := range required {
-			if strings.HasSuffix(r, "/") && strings.HasPrefix(header.Name, r) {
-				delete(requiredSet, header.Name)
-			}
-		}
 		if strings.Contains(header.Name, "..") {
 			return fmt.Errorf("illegal header name %s", header.Name)
 		}
 
-		destEntryPath := filepath.Join(destDir, filepath.FromSlash(header.Name))
-		if header.IsDir {
-			if err := os.MkdirAll(destEntryPath, header.Mode.Perm()); err != nil {
+		rel, err := filepath.Rel(root, header.Name)
+		if err != nil {
+			return err
+		}
+
+		destEntryPath := filepath.Join(destDir, filepath.FromSlash(rel))
+		if cb != nil {
+			if err = cb(ExtractEntry{
+				Name:    rel,
+				Test:    func(name string) bool { return isPathMatch(name, rel) },
+				Extract: func() error { return extractEntry(destEntryPath, header, content) },
+				Read: func() ([]byte, error) {
+					var buf bytes.Buffer
+					if _, err := io.Copy(&buf, content); err != nil {
+						return nil, err
+					}
+					return buf.Bytes(), nil
+				},
+			}); err != nil {
 				return err
 			}
 			continue
 		}
-		if err := os.MkdirAll(filepath.Dir(destEntryPath), 0666); err != nil {
-			return err
-		}
 
-		out, err := os.OpenFile(destEntryPath, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, header.Mode.Perm())
-		if err != nil {
-			return err
-		}
-		defer out.Close()
-
-		if _, err := io.Copy(out, content); err != nil {
+		if err = extractEntry(destEntryPath, header, content); err != nil {
 			return err
 		}
 	}
+	return nil
+}
 
-	for r := range requiredSet {
-		return fmt.Errorf("invalid problem zip format: missing %s at root", r)
+func extractEntry(destEntryPath string, header FileHeader, content io.Reader) error {
+	if header.IsDir {
+		if err := os.MkdirAll(destEntryPath, header.Mode.Perm()); err != nil {
+			return err
+		}
+		return nil
+	}
+	if err := os.MkdirAll(filepath.Dir(destEntryPath), 0666); err != nil {
+		return err
+	}
+
+	out, err := os.OpenFile(destEntryPath, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, header.Mode.Perm())
+	if err != nil {
+		return err
+	}
+	defer out.Close()
+
+	if _, err := io.Copy(out, content); err != nil {
+		return err
 	}
 	return nil
 }

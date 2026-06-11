@@ -95,6 +95,6 @@ func SubmissionGetSourceHandler(ctx *gin.Context) {
 	}
 
 	submissionManager := resources.SubmissionManager{Id: submissionId}
-	path := submissionManager.GetChildPath(resources.SubmissionZip)
+	path := submissionManager.GetZipPath()
 	ctx.FileAttachment(path, "source.zip")
 }

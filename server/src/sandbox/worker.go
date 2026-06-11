@@ -5,14 +5,12 @@ import (
 	"context"
 	"database/sql/driver"
 	"encoding/json"
-	"errors"
 	"fmt"
-	"io/fs"
+	"io"
 	"oj/server/parser"
 	"oj/server/sandbox/resources"
 	"oj/server/utility"
 	"oj/server/utility/archiver"
-	"os"
 	"path/filepath"
 	"time"
 
@@ -103,7 +101,9 @@ func (w Worker) Compile() (*CompilerOutput, error) {
 			"src/",
 		},
 		FilesToExtract: []string{
-			"build",
+			"build/",
+		},
+		FilesToRead: []string{
 			"config.log",
 			"compile.log",
 		},
@@ -113,22 +113,19 @@ func (w Worker) Compile() (*CompilerOutput, error) {
 		return nil, err
 	}
 
-	configLogBytes, err := os.ReadFile(filepath.Join(basePath, "config.log"))
-	if err != nil {
-		return nil, err
+	configLogBytes, exists := res.FileBytes["config.log"]
+	if !exists {
+		return nil, fmt.Errorf("config.log not exists")
 	}
 	configLog := string(configLogBytes)
 
-	compileLogBytes, err := os.ReadFile(filepath.Join(basePath, "compile.log"))
-	if err != nil {
-		if errors.Is(err, fs.ErrNotExist) {
-			return &CompilerOutput{ConfigLog: &configLog, ExitCode: res.StatusCode}, nil
-		}
-		return nil, err
+	compileLogBytes, exists := res.FileBytes["compile.log"]
+	if !exists {
+		return &CompilerOutput{ConfigLog: &configLog, ExitCode: res.ExitCode}, nil
 	}
 	compileLog := string(compileLogBytes)
 
-	return &CompilerOutput{ConfigLog: &configLog, CompileLog: &compileLog, ExitCode: res.StatusCode}, nil
+	return &CompilerOutput{ConfigLog: &configLog, CompileLog: &compileLog, ExitCode: res.ExitCode}, nil
 }
 
 func (w Worker) Run(timeout int) (*parser.TestResults, error) {
@@ -157,19 +154,19 @@ func (w Worker) Run(timeout int) (*parser.TestResults, error) {
 	}
 
 	basePath := w.Manager.GetBasePath()
-	_, err := w.setupContainerAndRun(ContainerSetupOptions{
-		CreateOptions:  options,
-		HostDir:        basePath,
-		FilesToImport:  []string{"build/"},
-		FilesToExtract: []string{"build/result.xml"},
+	res, err := w.setupContainerAndRun(ContainerSetupOptions{
+		CreateOptions: options,
+		HostDir:       basePath,
+		FilesToImport: []string{"build/"},
+		FilesToRead:   []string{"build/result.xml"},
 	})
 	if err != nil {
 		return nil, err
 	}
 
-	resultBytes, err := os.ReadFile(filepath.Join(basePath, "build/result.xml"))
-	if err != nil {
-		return nil, err
+	resultBytes, exists := res.FileBytes["build/result.xml"]
+	if !exists {
+		return nil, fmt.Errorf("result.xml not exists")
 	}
 	return parser.ParseTestResults(resultBytes)
 }
@@ -179,9 +176,16 @@ type ContainerSetupOptions struct {
 	HostDir        string
 	FilesToImport  []string
 	FilesToExtract []string
+	FilesToRead    []string
 }
 
-func (w Worker) setupContainerAndRun(options ContainerSetupOptions) (*container.WaitResponse, error) {
+type ContainerRunResult struct {
+	ExitCode  int64
+	Stdout    []byte
+	FileBytes map[string][]byte
+}
+
+func (w Worker) setupContainerAndRun(options ContainerSetupOptions) (*ContainerRunResult, error) {
 	createResult, err := w.Moby.ContainerCreate(w.Context, options.CreateOptions)
 	if err != nil {
 		return nil, err
@@ -190,7 +194,25 @@ func (w Worker) setupContainerAndRun(options ContainerSetupOptions) (*container.
 	containerId := createResult.ID
 	defer w.Moby.ContainerRemove(w.Context, containerId, client.ContainerRemoveOptions{RemoveVolumes: false})
 
-	buf, err := makeTarStream(options.HostDir, options.FilesToImport)
+	buf, err := func() (*bytes.Buffer, error) {
+		var buf bytes.Buffer
+		tw := archiver.NewTarWriter(&buf)
+		defer tw.Close()
+
+		err := archiver.CompressDir(tw, options.HostDir, func(entry archiver.CompressEntry) error {
+			for _, f := range options.FilesToImport {
+				if entry.Test(f) {
+					return entry.Compress()
+				}
+			}
+			return nil
+		})
+		if err != nil {
+			return nil, err
+		}
+
+		return &buf, nil
+	}()
 	if err != nil {
 		return nil, err
 	}
@@ -218,40 +240,51 @@ func (w Worker) setupContainerAndRun(options ContainerSetupOptions) (*container.
 		if err != nil {
 			return nil, err
 		}
-		stdbuf := make([]byte, 1024)
-		logResult.Read(stdbuf)
-		fmt.Println(string(stdbuf))
-		for _, f := range options.FilesToExtract {
-			copyResult, err := w.Moby.CopyFromContainer(w.Context, containerId, client.CopyFromContainerOptions{
-				SourcePath: filepath.Join("/workspace", f),
-			})
-			if err != nil {
-				return nil, err
-			}
+		defer logResult.Close()
 
-			fmt.Printf("extracting from %s->%s\n", filepath.Join("/workspace", f), filepath.Join(options.HostDir, filepath.Dir(f)))
-			tr := archiver.NewTarReader(copyResult.Content)
-			if err = archiver.ExtractTo(tr, filepath.Join(options.HostDir, filepath.Dir(f))); err != nil {
-				return nil, err
+		var stdbuf bytes.Buffer
+		io.Copy(&stdbuf, logResult)
+		stdoutBytes := stdbuf.Bytes()
+		fmt.Println(string(stdoutBytes))
+
+		copyResult, err := w.Moby.CopyFromContainer(w.Context, containerId, client.CopyFromContainerOptions{
+			SourcePath: "/workspace",
+		})
+		defer copyResult.Content.Close()
+
+		fileBytes := make(map[string][]byte)
+		tr := archiver.NewTarReader(copyResult.Content)
+		err = archiver.ExtractTo(tr, options.HostDir, "workspace", func(entry archiver.ExtractEntry) error {
+			for _, f := range options.FilesToExtract {
+				if entry.Test(f) {
+					if err := entry.Extract(); err != nil {
+						return err
+					}
+				}
 			}
+			for _, f := range options.FilesToRead {
+				if f == entry.Name {
+					bytes, err := entry.Read()
+					if err != nil {
+						return err
+					}
+					fileBytes[f] = bytes
+				}
+			}
+			return nil
+		})
+		if err != nil {
+			return nil, err
 		}
-		return &res, nil
+
+		return &ContainerRunResult{
+			ExitCode:  res.StatusCode,
+			Stdout:    stdoutBytes,
+			FileBytes: fileBytes,
+		}, nil
 	case err := <-waitResult.Error:
 		return nil, err
 	}
-}
-
-func makeTarStream(srcDir string, files []string) (*bytes.Buffer, error) {
-	var buf bytes.Buffer
-	tw := archiver.NewTarWriter(&buf)
-	defer tw.Close()
-
-	err := archiver.CompressFiles(tw, srcDir, files)
-	if err != nil {
-		return nil, err
-	}
-
-	return &buf, nil
 }
 
 func CreateWorker(

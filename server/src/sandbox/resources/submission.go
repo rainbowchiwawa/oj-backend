@@ -11,7 +11,6 @@ import (
 type SubmissionChildPath string
 
 const (
-	SubmissionZip        SubmissionChildPath = "source.zip"
 	SubmissionExtractDir SubmissionChildPath = "src"
 )
 
@@ -37,12 +36,16 @@ func (s SubmissionManager) GetBasePath() string {
 	return filepath.Join(submissionBasePath, s.Id)
 }
 
+func (s SubmissionManager) GetZipPath() string {
+	return filepath.Join(submissionBasePath, s.Id+".zip")
+}
+
 func (s SubmissionManager) GetChildPath(childPath SubmissionChildPath) string {
 	return filepath.Join(s.GetBasePath(), string(childPath))
 }
 
 func (s SubmissionManager) extractAndSave(file *multipart.FileHeader) error {
-	zipPath := s.GetChildPath(SubmissionZip)
+	zipPath := s.GetZipPath()
 	extractPath := s.GetChildPath(SubmissionExtractDir)
 	if err := os.MkdirAll(extractPath, os.ModePerm); err != nil {
 		return err
@@ -67,7 +70,7 @@ func (s SubmissionManager) extractAndSave(file *multipart.FileHeader) error {
 	if err != nil {
 		return err
 	}
-	return archiver.ExtractTo(zr, extractPath)
+	return archiver.ExtractTo(zr, extractPath, "", nil)
 }
 
 func (s SubmissionManager) CopyTestFiles(p ProblemManager) (err error) {
