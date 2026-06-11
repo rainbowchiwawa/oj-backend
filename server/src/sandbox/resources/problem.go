@@ -179,7 +179,8 @@ func (p ProblemManager) extractAndSave(file *multipart.FileHeader) error {
 	} {
 		requiredSet[r] = struct{}{}
 	}
-	return archiver.ExtractTo(zr, extractPath, "", func(entry archiver.ExtractEntry) error {
+
+	err = archiver.ExtractTo(zr, extractPath, "", func(entry archiver.ExtractEntry) error {
 		if _, exists := requiredSet[entry.Name]; exists {
 			delete(requiredSet, entry.Name)
 			return entry.Extract()
@@ -191,6 +192,18 @@ func (p ProblemManager) extractAndSave(file *multipart.FileHeader) error {
 		}
 		return entry.Extract()
 	})
+	if err != nil {
+		return err
+	}
+
+	if len(requiredSet) > 0 {
+		message := ""
+		for r := range requiredSet {
+			message += r + ", "
+		}
+		return fmt.Errorf("missing following files: %s\n", message)
+	}
+	return nil
 }
 
 func (p ProblemManager) createTemplateZip(public []parser.ProblemPublicPair) error {

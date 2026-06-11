@@ -143,7 +143,10 @@ func (w Worker) run(timeout int) (*parser.TestResults, error) {
 		Image:           RUNNER_IMG_NAME,
 		NetworkDisabled: true,
 		Cmd: []string{
-			"sh", "-c", fmt.Sprintf("cp -r build build_app && cd build_app && ctest --timeout %d --output-junit result.xml", timeout),
+			"sh", "-c",
+			"chown -R app:app /workspace &&" +
+				"su app &&" +
+				fmt.Sprintf("ctest --test-dir build --timeout %d --output-junit result.xml", timeout),
 		},
 		Labels: map[string]string{"com.docker.compose.progject": "oj-runner"},
 	}
@@ -167,13 +170,13 @@ func (w Worker) run(timeout int) (*parser.TestResults, error) {
 		CreateOptions: options,
 		HostDir:       basePath,
 		FilesToImport: []string{"build/"},
-		FilesToRead:   []string{"build_app/result.xml"},
+		FilesToRead:   []string{"build/result.xml"},
 	})
 	if err != nil {
 		return nil, err
 	}
 
-	resultBytes, exists := res.FileBytes["build_app/result.xml"]
+	resultBytes, exists := res.FileBytes["build/result.xml"]
 	if !exists {
 		return nil, fmt.Errorf("result.xml not exists")
 	}

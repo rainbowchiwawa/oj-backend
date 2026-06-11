@@ -41,9 +41,17 @@ func CreateSubmission(problemId string, userId string) (Submission, error) {
 	return newSubmission, nil
 }
 
+func ResetSubmission(id string) (Submission, error) {
+	newSubmission := Submission{Score: 0, Status: sandbox.StatusPending, Result: nil, UpdatedAt: time.Now()}
+	if res := db.Table("submissions").Where("id = ?", id).Select("Score", "Status", "Result", "UpdatedAt").Updates(&newSubmission); res.Error != nil {
+		return Submission{}, res.Error
+	}
+	return newSubmission, nil
+}
+
 func UpdateSubmissionWithWorkerOutput(id string, score int, status sandbox.TestStatus, output *sandbox.WorkerLogs) (Submission, error) {
-	newSubmission := Submission{Score: score, Status: status, Result: output}
-	if res := db.Table("submissions").Where("id = ?", id).Updates(&newSubmission); res.Error != nil {
+	newSubmission := Submission{Score: score, Status: status, Result: output, UpdatedAt: time.Now()}
+	if res := db.Table("submissions").Where("id = ?", id).Select("Score", "Status", "Result", "UpdatedAt").Updates(&newSubmission); res.Error != nil {
 		return Submission{}, res.Error
 	}
 	return newSubmission, nil

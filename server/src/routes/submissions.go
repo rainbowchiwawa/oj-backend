@@ -119,6 +119,12 @@ func SubmissionRerunHandler(ctx *gin.Context) {
 		return
 	}
 
+	submission, err = database.ResetSubmission(submissionId)
+	if err != nil {
+		ctx.String(http.StatusInternalServerError, "failed to reset submission")
+		return
+	}
+
 	sandbox.PushJob(sandbox.WorkerInput{
 		ProblemId:    problem.Id.String(),
 		SubmissionId: submissionId,
