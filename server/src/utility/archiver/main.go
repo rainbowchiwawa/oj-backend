@@ -119,10 +119,7 @@ func ExtractTo(r Reader, destDir string, options ...[]string) error {
 			return err
 		}
 
-		if _, exists := requiredSet[header.Name]; exists {
-			delete(requiredSet, header.Name)
-			continue
-		}
+		delete(requiredSet, header.Name)
 		for _, r := range required {
 			if strings.HasSuffix(r, "/") && strings.HasPrefix(header.Name, r) {
 				delete(requiredSet, header.Name)
