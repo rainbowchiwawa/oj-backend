@@ -46,9 +46,11 @@ func consume() {
 }
 
 func init() {
-	go func() {
-		for {
-			consume()
-		}
-	}()
+	for i := 0; i < MAX_WORKER_COUNT; i++ {
+		go func() {
+			for {
+				consume()
+			}
+		}()
+	}
 }
