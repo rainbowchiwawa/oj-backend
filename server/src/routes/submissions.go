@@ -6,13 +6,14 @@ import (
 	"oj/server/database"
 	"oj/server/sandbox"
 	"oj/server/sandbox/resources"
+	"os"
 
 	"github.com/gin-gonic/gin"
 )
 
 type SubmissionCreateRequest struct {
-	ProblemId string                `form:"problem_id"`
-	File      *multipart.FileHeader `form:"file"`
+	ProblemId string                `form:"problem_id" binding:"required"`
+	File      *multipart.FileHeader `form:"file" binding:"required"`
 }
 
 func SubmissionCreateHandler(ctx *gin.Context) {
@@ -36,18 +37,32 @@ func SubmissionCreateHandler(ctx *gin.Context) {
 	}
 
 	submissionId := submission.Id.String()
-	err = resources.SaveUploadedSubmission(submissionId, body.File, func() error { return database.DeleteSubmission(submissionId) })
+	err = resources.SaveUploadedSubmission(submissionId, body.File, func() error {
+		database.UpdateSubmissionWithWorkerOutput(submissionId, 0, sandbox.StatusError, &sandbox.WorkerLogs{})
+		submissionManager := resources.SubmissionManager{Id: submissionId}
+		submissionManager.ClearFiles()
+		os.Remove(submissionManager.GetZipPath())
+		return nil
+	})
 	if err != nil {
 		ctx.String(http.StatusInternalServerError, "failed to write file")
 		return
 	}
 
-	sandbox.PushJob(sandbox.WorkerInput{
+	err = sandbox.PushJob(sandbox.WorkerInput{
 		ProblemId:    problem.Id.String(),
 		SubmissionId: submissionId,
 		Settings:     problem.Settings,
 		Answer:       problem.Answer,
 	})
+	if err != nil {
+		database.UpdateSubmissionWithWorkerOutput(submissionId, 0, sandbox.StatusError, &sandbox.WorkerLogs{})
+		submissionManager := resources.SubmissionManager{Id: submissionId}
+		submissionManager.ClearFiles()
+		os.Remove(submissionManager.GetZipPath())
+		ctx.String(http.StatusServiceUnavailable, "Job queue is full")
+		return
+	}
 	ctx.JSON(http.StatusCreated, gin.H{"id": submissionId})
 }
 
@@ -125,12 +140,17 @@ func SubmissionRerunHandler(ctx *gin.Context) {
 		return
 	}
 
-	sandbox.PushJob(sandbox.WorkerInput{
+	err = sandbox.PushJob(sandbox.WorkerInput{
 		ProblemId:    problem.Id.String(),
 		SubmissionId: submissionId,
 		Settings:     problem.Settings,
 		Answer:       problem.Answer,
 	})
+	if err != nil {
+		database.UpdateSubmissionWithWorkerOutput(submissionId, 0, sandbox.StatusError, &sandbox.WorkerLogs{})
+		ctx.String(http.StatusServiceUnavailable, "Job queue is full")
+		return
+	}
 	ctx.String(http.StatusOK, "")
 }
 

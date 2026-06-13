@@ -303,6 +303,8 @@ func (w Worker) setupContainerAndRun(options ContainerSetupOptions) (*ContainerR
 func createWorker(payload WorkerInput) (*WorkerOutput, error) {
 	submissionManager := resources.SubmissionManager{Id: payload.SubmissionId}
 	if err := submissionManager.ExtractZip(); err != nil {
+		submissionManager.ClearFiles()
+		submissionManager.ClearZip()
 		return nil, err
 	}
 	defer submissionManager.ClearFiles()

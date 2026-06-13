@@ -114,3 +114,7 @@ func (s SubmissionManager) CopyTestFiles(p ProblemManager) (err error) {
 func (s SubmissionManager) ClearFiles() error {
 	return os.RemoveAll(s.GetBasePath())
 }
+
+func (s SubmissionManager) ClearZip() error {
+	return os.Remove(s.GetZipPath())
+}
