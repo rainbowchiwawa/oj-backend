@@ -7,6 +7,10 @@ import (
 
 	jwt "github.com/appleboy/gin-jwt/v3"
 	"github.com/gin-gonic/gin"
+
+	_ "oj/server/docs"
+	swaggerFiles "github.com/swaggo/files"
+	ginSwagger "github.com/swaggo/gin-swagger"
 )
 
 func Init() {
@@ -61,5 +65,6 @@ func Init() {
 			stats.GET("/users/:userId", StatsGetUserHandler)
 		}
 	}
+	router.GET("/swagger/*any", ginSwagger.WrapHandler(swaggerFiles.Handler))
 	router.Run(":8080")
 }

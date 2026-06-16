@@ -16,6 +16,18 @@ type SubmissionCreateRequest struct {
 	File      *multipart.FileHeader `form:"file" binding:"required"`
 }
 
+// @Summary Create a submission
+// @Description Submit code for a problem
+// @Tags submissions
+// @Security Bearer
+// @Accept multipart/form-data
+// @Produce json
+// @Param problem_id formData string true "Problem ID"
+// @Param file formData file true "Submission zip file"
+// @Success 201 {object} map[string]interface{} "id of the submission"
+// @Failure 404 {string} string "Not Found"
+// @Failure 500 {string} string "Internal Server Error"
+// @Router /submissions [post]
 func SubmissionCreateHandler(ctx *gin.Context) {
 	user := GetUser(ctx)
 
@@ -66,6 +78,15 @@ func SubmissionCreateHandler(ctx *gin.Context) {
 	ctx.JSON(http.StatusCreated, gin.H{"id": submissionId})
 }
 
+// @Summary List submissions by user
+// @Description Get all submissions of a specific user
+// @Tags submissions
+// @Security Bearer
+// @Produce json
+// @Param id path string true "User ID"
+// @Success 200 {array} map[string]interface{}
+// @Failure 500 {string} string "Internal Server Error"
+// @Router /submissions/user/{id} [get]
 func SubmissionGetAllByUserIdHandler(ctx *gin.Context) {
 	userId := ctx.Param("id")
 
@@ -78,6 +99,14 @@ func SubmissionGetAllByUserIdHandler(ctx *gin.Context) {
 	ctx.JSON(http.StatusOK, submissions)
 }
 
+// @Summary List user submissions
+// @Description Get all submissions of the currently logged in user
+// @Tags submissions
+// @Security Bearer
+// @Produce json
+// @Success 200 {array} map[string]interface{}
+// @Failure 500 {string} string "Internal Server Error"
+// @Router /submissions [get]
 func SubmissionGetAllHandler(ctx *gin.Context) {
 	user := GetUser(ctx)
 
@@ -90,6 +119,16 @@ func SubmissionGetAllHandler(ctx *gin.Context) {
 	ctx.JSON(http.StatusOK, submissions)
 }
 
+// @Summary Get a submission
+// @Description Get a specific submission by its ID
+// @Tags submissions
+// @Security Bearer
+// @Produce json
+// @Param submissionId path string true "Submission ID"
+// @Success 200 {object} map[string]interface{}
+// @Failure 403 {string} string "Forbidden"
+// @Failure 404 {string} string "Not Found"
+// @Router /submissions/{submissionId} [get]
 func SubmissionGetHandler(ctx *gin.Context) {
 	user := GetUser(ctx)
 	submissionId := ctx.Param("submissionId")
@@ -108,6 +147,19 @@ func SubmissionGetHandler(ctx *gin.Context) {
 	ctx.JSON(http.StatusOK, submission)
 }
 
+// @Summary Rerun a submission
+// @Description Rerun a specific submission by its ID
+// @Tags submissions
+// @Security Bearer
+// @Produce plain
+// @Param submissionId path string true "Submission ID"
+// @Success 200 {string} string "OK"
+// @Failure 403 {string} string "Forbidden"
+// @Failure 404 {string} string "Not Found"
+// @Failure 409 {string} string "Conflict"
+// @Failure 500 {string} string "Internal Server Error"
+// @Failure 503 {string} string "Service Unavailable"
+// @Router /submissions/{submissionId} [post]
 func SubmissionRerunHandler(ctx *gin.Context) {
 	user := GetUser(ctx)
 	submissionId := ctx.Param("submissionId")
@@ -154,6 +206,16 @@ func SubmissionRerunHandler(ctx *gin.Context) {
 	ctx.String(http.StatusOK, "")
 }
 
+// @Summary Get submission source
+// @Description Get the source zip file of a submission
+// @Tags submissions
+// @Security Bearer
+// @Produce application/zip
+// @Param submissionId path string true "Submission ID"
+// @Success 200 {file} file
+// @Failure 403 {string} string "Forbidden"
+// @Failure 404 {string} string "Not Found"
+// @Router /submissions/{submissionId}/source [get]
 func SubmissionGetSourceHandler(ctx *gin.Context) {
 	user := GetUser(ctx)
 	submissionId := ctx.Param("submissionId")
