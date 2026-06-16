@@ -23,6 +23,20 @@ type ProblemCreateRequest struct {
 	File        *multipart.FileHeader `form:"file" binding:"required"`
 }
 
+// @Summary Create or edit a problem
+// @Description Create a new problem or edit an existing one
+// @Tags problems
+// @Security Bearer
+// @Accept multipart/form-data
+// @Produce json
+// @Param title formData string true "Problem Title"
+// @Param description formData string true "Problem Description"
+// @Param file formData file true "Problem Zip File"
+// @Success 200 {object} map[string]interface{}
+// @Success 201 {object} map[string]interface{}
+// @Failure 400 {string} string "Bad Request"
+// @Failure 500 {string} string "Internal Server Error"
+// @Router /problems [put]
 func ProblemCreateOrEditHandler(ctx *gin.Context) {
 	var body ProblemCreateRequest
 	if err := ctx.ShouldBind(&body); err != nil {
@@ -67,6 +81,16 @@ func ProblemCreateOrEditHandler(ctx *gin.Context) {
 	ctx.JSON(code, gin.H{"id": problemId})
 }
 
+// @Summary Delete a problem
+// @Description Delete a specific problem by ID
+// @Tags problems
+// @Security Bearer
+// @Produce plain
+// @Param id path string true "Problem ID"
+// @Success 200 {string} string "OK"
+// @Failure 404 {string} string "Not Found"
+// @Failure 500 {string} string "Internal Server Error"
+// @Router /problems/{id} [delete]
 func ProblemDeleteHandler(ctx *gin.Context) {
 	id := ctx.Param("id")
 
@@ -88,6 +112,14 @@ func ProblemDeleteHandler(ctx *gin.Context) {
 	ctx.String(http.StatusOK, "")
 }
 
+// @Summary Get a problem
+// @Description Get problem details by ID
+// @Tags problems
+// @Produce json
+// @Param id path string true "Problem ID"
+// @Success 200 {object} map[string]interface{}
+// @Failure 404 {string} string "Not Found"
+// @Router /problems/{id} [get]
 func ProblemGetHandler(ctx *gin.Context) {
 	id := ctx.Param("id")
 	problem, err := database.GetProblemById(id)
@@ -106,6 +138,13 @@ func ProblemGetHandler(ctx *gin.Context) {
 	})
 }
 
+// @Summary List problems
+// @Description Get all problems
+// @Tags problems
+// @Produce json
+// @Success 200 {array} map[string]interface{}
+// @Failure 500 {string} string "Internal Server Error"
+// @Router /problems [get]
 func ProblemsGetHandler(ctx *gin.Context) {
 	problems, err := database.GetProblems()
 	if err != nil {
@@ -128,6 +167,14 @@ func ProblemsGetHandler(ctx *gin.Context) {
 	ctx.JSON(http.StatusOK, problemsList)
 }
 
+// @Summary Get problem template
+// @Description Download problem template zip file
+// @Tags problems
+// @Produce application/zip
+// @Param id path string true "Problem ID"
+// @Success 200 {file} file
+// @Failure 404 {string} string "Not Found"
+// @Router /problems/{id}/template [get]
 func ProblemTemplateGetHandler(ctx *gin.Context) {
 	id := ctx.Param("id")
 
@@ -155,6 +202,15 @@ func ProblemTemplateGetHandler(ctx *gin.Context) {
 	ctx.FileAttachment(zipPath, fmt.Sprintf("%s_template.zip", problem.Title))
 }
 
+// @Summary Get problem test cases
+// @Description Download problem test cases zip file
+// @Tags problems
+// @Security Bearer
+// @Produce application/zip
+// @Param id path string true "Problem ID"
+// @Success 200 {file} file
+// @Failure 404 {string} string "Not Found"
+// @Router /problems/{id}/testcases [get]
 func ProblemTestCasesGetHandler(ctx *gin.Context) {
 	id := ctx.Param("id")
 

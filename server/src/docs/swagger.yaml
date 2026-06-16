@@ -1,0 +1,531 @@
+basePath: /api
+definitions:
+  routes.UserLoginRequest:
+    properties:
+      name:
+        type: string
+      password:
+        type: string
+    required:
+    - name
+    - password
+    type: object
+  routes.UserRegisterRequest:
+    properties:
+      name:
+        type: string
+      password:
+        type: string
+      type:
+        enum:
+        - admin
+        - user
+        type: string
+    required:
+    - name
+    - password
+    - type
+    type: object
+host: localhost:8080
+info:
+  contact: {}
+  description: This is the backend API for the Online Judge.
+  title: OJ Backend API
+  version: "1.0"
+paths:
+  /problems:
+    get:
+      description: Get all problems
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            items:
+              additionalProperties: true
+              type: object
+            type: array
+        "500":
+          description: Internal Server Error
+          schema:
+            type: string
+      summary: List problems
+      tags:
+      - problems
+    put:
+      consumes:
+      - multipart/form-data
+      description: Create a new problem or edit an existing one
+      parameters:
+      - description: Problem Title
+        in: formData
+        name: title
+        required: true
+        type: string
+      - description: Problem Description
+        in: formData
+        name: description
+        required: true
+        type: string
+      - description: Problem Zip File
+        in: formData
+        name: file
+        required: true
+        type: file
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties: true
+            type: object
+        "201":
+          description: Created
+          schema:
+            additionalProperties: true
+            type: object
+        "400":
+          description: Bad Request
+          schema:
+            type: string
+        "500":
+          description: Internal Server Error
+          schema:
+            type: string
+      security:
+      - Bearer: []
+      summary: Create or edit a problem
+      tags:
+      - problems
+  /problems/{id}:
+    delete:
+      description: Delete a specific problem by ID
+      parameters:
+      - description: Problem ID
+        in: path
+        name: id
+        required: true
+        type: string
+      produces:
+      - text/plain
+      responses:
+        "200":
+          description: OK
+          schema:
+            type: string
+        "404":
+          description: Not Found
+          schema:
+            type: string
+        "500":
+          description: Internal Server Error
+          schema:
+            type: string
+      security:
+      - Bearer: []
+      summary: Delete a problem
+      tags:
+      - problems
+    get:
+      description: Get problem details by ID
+      parameters:
+      - description: Problem ID
+        in: path
+        name: id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties: true
+            type: object
+        "404":
+          description: Not Found
+          schema:
+            type: string
+      summary: Get a problem
+      tags:
+      - problems
+  /problems/{id}/template:
+    get:
+      description: Download problem template zip file
+      parameters:
+      - description: Problem ID
+        in: path
+        name: id
+        required: true
+        type: string
+      produces:
+      - application/zip
+      responses:
+        "200":
+          description: OK
+          schema:
+            type: file
+        "404":
+          description: Not Found
+          schema:
+            type: string
+      summary: Get problem template
+      tags:
+      - problems
+  /problems/{id}/testcases:
+    get:
+      description: Download problem test cases zip file
+      parameters:
+      - description: Problem ID
+        in: path
+        name: id
+        required: true
+        type: string
+      produces:
+      - application/zip
+      responses:
+        "200":
+          description: OK
+          schema:
+            type: file
+        "404":
+          description: Not Found
+          schema:
+            type: string
+      security:
+      - Bearer: []
+      summary: Get problem test cases
+      tags:
+      - problems
+  /stats/problems/{problemId}:
+    get:
+      description: Get the statistics for a specific problem
+      parameters:
+      - description: Problem ID
+        in: path
+        name: problemId
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties:
+              type: integer
+            type: object
+        "500":
+          description: Internal Server Error
+          schema:
+            type: string
+      summary: Get problem statistics
+      tags:
+      - stats
+  /stats/users/{userId}:
+    get:
+      description: Get the statistics for a specific user
+      parameters:
+      - description: User ID
+        in: path
+        name: userId
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties:
+              type: integer
+            type: object
+        "500":
+          description: Internal Server Error
+          schema:
+            type: string
+      summary: Get user statistics
+      tags:
+      - stats
+  /submissions:
+    get:
+      description: Get all submissions of the currently logged in user
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            items:
+              additionalProperties: true
+              type: object
+            type: array
+        "500":
+          description: Internal Server Error
+          schema:
+            type: string
+      security:
+      - Bearer: []
+      summary: List user submissions
+      tags:
+      - submissions
+    post:
+      consumes:
+      - multipart/form-data
+      description: Submit code for a problem
+      parameters:
+      - description: Problem ID
+        in: formData
+        name: problem_id
+        required: true
+        type: string
+      - description: Submission zip file
+        in: formData
+        name: file
+        required: true
+        type: file
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: id of the submission
+          schema:
+            additionalProperties: true
+            type: object
+        "404":
+          description: Not Found
+          schema:
+            type: string
+        "500":
+          description: Internal Server Error
+          schema:
+            type: string
+      security:
+      - Bearer: []
+      summary: Create a submission
+      tags:
+      - submissions
+  /submissions/{submissionId}:
+    get:
+      description: Get a specific submission by its ID
+      parameters:
+      - description: Submission ID
+        in: path
+        name: submissionId
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties: true
+            type: object
+        "403":
+          description: Forbidden
+          schema:
+            type: string
+        "404":
+          description: Not Found
+          schema:
+            type: string
+      security:
+      - Bearer: []
+      summary: Get a submission
+      tags:
+      - submissions
+    post:
+      description: Rerun a specific submission by its ID
+      parameters:
+      - description: Submission ID
+        in: path
+        name: submissionId
+        required: true
+        type: string
+      produces:
+      - text/plain
+      responses:
+        "200":
+          description: OK
+          schema:
+            type: string
+        "403":
+          description: Forbidden
+          schema:
+            type: string
+        "404":
+          description: Not Found
+          schema:
+            type: string
+        "409":
+          description: Conflict
+          schema:
+            type: string
+        "500":
+          description: Internal Server Error
+          schema:
+            type: string
+        "503":
+          description: Service Unavailable
+          schema:
+            type: string
+      security:
+      - Bearer: []
+      summary: Rerun a submission
+      tags:
+      - submissions
+  /submissions/{submissionId}/source:
+    get:
+      description: Get the source zip file of a submission
+      parameters:
+      - description: Submission ID
+        in: path
+        name: submissionId
+        required: true
+        type: string
+      produces:
+      - application/zip
+      responses:
+        "200":
+          description: OK
+          schema:
+            type: file
+        "403":
+          description: Forbidden
+          schema:
+            type: string
+        "404":
+          description: Not Found
+          schema:
+            type: string
+      security:
+      - Bearer: []
+      summary: Get submission source
+      tags:
+      - submissions
+  /submissions/user/{id}:
+    get:
+      description: Get all submissions of a specific user
+      parameters:
+      - description: User ID
+        in: path
+        name: id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            items:
+              additionalProperties: true
+              type: object
+            type: array
+        "500":
+          description: Internal Server Error
+          schema:
+            type: string
+      security:
+      - Bearer: []
+      summary: List submissions by user
+      tags:
+      - submissions
+  /users/login:
+    post:
+      consumes:
+      - application/json
+      description: Login with name and password
+      parameters:
+      - description: User Login Request
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/routes.UserLoginRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties: true
+            type: object
+        "401":
+          description: Unauthorized
+          schema:
+            type: string
+      summary: User login
+      tags:
+      - users
+  /users/logout:
+    post:
+      description: Logout current user
+      produces:
+      - text/plain
+      responses:
+        "200":
+          description: OK
+          schema:
+            type: string
+      security:
+      - Bearer: []
+      summary: User logout
+      tags:
+      - users
+  /users/me:
+    get:
+      description: Get the details of the currently logged-in user
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties: true
+            type: object
+      security:
+      - Bearer: []
+      summary: Get current user info
+      tags:
+      - users
+  /users/register:
+    post:
+      consumes:
+      - application/json
+      description: Register a user with name, password, and type
+      parameters:
+      - description: User Registration Info
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/routes.UserRegisterRequest'
+      produces:
+      - text/plain
+      responses:
+        "200":
+          description: OK
+          schema:
+            type: string
+        "400":
+          description: Bad Request
+          schema:
+            type: string
+        "409":
+          description: Conflict
+          schema:
+            type: string
+      summary: Register a new user
+      tags:
+      - users
+securityDefinitions:
+  Bearer:
+    description: Type "Bearer" followed by a space and JWT token.
+    in: header
+    name: Authorization
+    type: apiKey
+swagger: "2.0"
