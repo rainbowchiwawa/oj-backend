@@ -147,7 +147,7 @@ func extractEntry(destEntryPath string, header FileHeader, content io.Reader) er
 		}
 		return nil
 	}
-	if err := os.MkdirAll(filepath.Dir(destEntryPath), 0666); err != nil {
+	if err := os.MkdirAll(filepath.Dir(destEntryPath), 0755); err != nil {
 		return err
 	}
 

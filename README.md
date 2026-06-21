@@ -6,8 +6,8 @@
 - `server/`: 核心後端應用程式。
   - `src/`: Go 原始碼，包含路由 (Routes)、資料庫設定 (Database) 以及沙盒邏輯 (Sandbox)。
   - `compiler/` & `runner/`: 用於程式碼執行沙盒的 Dockerfile。
-- `problems/`: 用於存放題目描述與測試測資 (Test cases) 的資料夾。
-- `submissions/`: 用於存放使用者提交之程式碼的資料夾。
+- `problems/`: 在本地運行時，用於存放題目描述與測試測資 (Test cases) 的資料夾。
+- `submissions/`: 在本地運行時，用於存放使用者提交之程式碼的資料夾。
 - `docker-compose.yaml`: 用於一鍵啟動後端與資料庫服務的 Docker 配置檔。
 
 ## 如何開始
@@ -25,18 +25,10 @@
    ```
 
 2. **啟動服務**:
-   您可以使用專案提供的腳本來快速啟動後端與相依服務：
+   使用以下指令來建置並啟動後端與相依服務：
    ```sh
-   chmod +x start.sh
-   ./start.sh
-   ```
-   *（註：`start.sh` 腳本會先自動建置所需的編譯器及執行器 docker 映像檔，然後再啟動 docker-compose）。*
-
-   您也可以選擇手動執行以下指令來啟動：
-   ```sh
-   docker build ./server/compiler -t compiler
-   docker build ./server/runner -t runner
-   docker compose --env_file=.env up -d
+   docker compose --env-file=.env build
+   docker compose --env-file=.env up -d
    ```
 
 ## 本地開發

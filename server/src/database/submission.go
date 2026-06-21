@@ -18,7 +18,7 @@ type Submission struct {
 	UpdatedAt time.Time           `gorm:"not null;default:now()" json:"updated_at"`
 }
 
-type SubmissionAggration struct {
+type SubmissionAggregation struct {
 	Status string
 	Count  int64
 }
@@ -67,14 +67,14 @@ func GetSubmissionById(id string) (Submission, error) {
 
 func GetAllSubmissionByUserId(userId string) ([]Submission, error) {
 	var submissions []Submission
-	if res := db.Table("submissions").Select("Id", "ProblemId", "UserId", "Status", "Score").Where("user_id = ?", userId).Find(&submissions).Order("created_at desc"); res.Error != nil {
+	if res := db.Table("submissions").Select("Id", "ProblemId", "UserId", "Status", "Score").Where("user_id = ?", userId).Order("created_at desc").Find(&submissions); res.Error != nil {
 		return nil, res.Error
 	}
 	return submissions, nil
 }
 
 func GetStatisticByProblemId(problemId string) (map[string]int64, error) {
-	var submissions []SubmissionAggration
+	var submissions []SubmissionAggregation
 	if res := db.Table("submissions").Select("Status, COUNT(*) as Count").Where("problem_id = ?", problemId).Where("status <> ?", sandbox.StatusPending).Group("status").Find(&submissions); res.Error != nil {
 		return nil, res.Error
 	}
@@ -86,7 +86,7 @@ func GetStatisticByProblemId(problemId string) (map[string]int64, error) {
 }
 
 func GetStatisticByUserId(userId string) (map[string]int64, error) {
-	var submissions []SubmissionAggration
+	var submissions []SubmissionAggregation
 	if res := db.Table("submissions").Select("Status, COUNT(*) as Count").Where("user_id = ?", userId).Where("status <> ?", sandbox.StatusPending).Group("status").Find(&submissions); res.Error != nil {
 		return nil, res.Error
 	}

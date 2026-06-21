@@ -30,7 +30,7 @@ func CreateInvalidToken(_id string, expiredAt float64) error {
 		return err
 	}
 
-	res := db.Table("invalid_tokens").Create(&InvalidToken{Id: id, ExpiredAt: time.Unix(int64(expiredAt), int64(expiredAt*1000)%1000)})
+	res := db.Table("invalid_tokens").Create(&InvalidToken{Id: id, ExpiredAt: time.Unix(int64(expiredAt), 0)})
 	return res.Error
 }
 

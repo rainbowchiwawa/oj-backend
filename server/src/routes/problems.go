@@ -157,12 +157,12 @@ func ProblemsGetHandler(ctx *gin.Context) {
 		Title string `json:"title"`
 	}
 
-	var problemsList []problemResponse
-	for _, problem := range problems {
-		problemsList = append(problemsList, problemResponse{
+	problemsList := make([]problemResponse, len(problems))
+	for i, problem := range problems {
+		problemsList[i] = problemResponse{
 			Id:    problem.Id.String(),
 			Title: problem.Title,
-		})
+		}
 	}
 	ctx.JSON(http.StatusOK, problemsList)
 }

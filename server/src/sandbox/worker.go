@@ -144,8 +144,8 @@ func (w Worker) run(timeout int) (*parser.TestResults, error) {
 		NetworkDisabled: true,
 		Cmd: []string{
 			"sh", "-c",
-			"chown -R app:app /workspace &&" +
-				"su app &&" +
+			"chown -R app:app /workspace && " +
+				"su app && " +
 				fmt.Sprintf("ctest --test-dir build --timeout %d --output-junit result.xml", timeout),
 		},
 		Labels: map[string]string{"com.docker.compose.progject": "oj-runner"},
@@ -263,6 +263,10 @@ func (w Worker) setupContainerAndRun(options ContainerSetupOptions) (*ContainerR
 		copyResult, err := w.Moby.CopyFromContainer(w.Context, containerId, client.CopyFromContainerOptions{
 			SourcePath: "/workspace",
 		})
+
+		if err != nil {
+			return nil, err
+		}
 		defer copyResult.Content.Close()
 
 		fileBytes := make(map[string][]byte)

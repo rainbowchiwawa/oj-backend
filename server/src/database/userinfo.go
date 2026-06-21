@@ -15,7 +15,7 @@ type UserInfo struct {
 	Id           uuid.UUID `gorm:"type:uuid;primary_key;default:gen_random_uuid()" json:"id"`
 	Type         UserType  `gorm:"not null" json:"type"`
 	Name         string    `gorm:"not null;unique" json:"name"`
-	PasswordHash string    `gorm:"not null" json:"password_hash"`
+	PasswordHash string    `gorm:"not null" json:"-"`
 }
 
 func IsUserValid(id string, target UserType) (bool, error) {

@@ -1,15 +1,25 @@
 package routes
 
 import (
+	"fmt"
 	"mime/multipart"
 	"net/http"
 	"oj/server/database"
 	"oj/server/sandbox"
 	"oj/server/sandbox/resources"
+
 	"os"
 
 	"github.com/gin-gonic/gin"
 )
+
+type submissionRoughResponse struct {
+	Id        string         `json:"id"`
+	ProblemId string         `json:"problem_id"`
+	UserId    string         `json:"user_id"`
+	Status    sandbox.TestStatus `json:"status"`
+	Score     int            `json:"score"`
+}
 
 type SubmissionCreateRequest struct {
 	ProblemId string                `form:"problem_id" binding:"required"`
@@ -33,6 +43,11 @@ func SubmissionCreateHandler(ctx *gin.Context) {
 
 	var body SubmissionCreateRequest
 	if err := ctx.Bind(&body); err != nil {
+		return
+	}
+
+	if body.File.Size > maxUploadSize {
+		ctx.String(http.StatusBadRequest, fmt.Sprintf("file too large: %d bytes (max %d)", body.File.Size, maxUploadSize))
 		return
 	}
 
@@ -96,7 +111,18 @@ func SubmissionGetAllByUserIdHandler(ctx *gin.Context) {
 		return
 	}
 
-	ctx.JSON(http.StatusOK, submissions)
+	refinedSubmissions := make([]submissionRoughResponse, 0)
+	for _, submission := range submissions {
+		refinedSubmissions = append(refinedSubmissions, submissionRoughResponse{
+			Id:        submission.Id.String(),
+			ProblemId: submission.ProblemId.String(),
+			UserId:    submission.UserId.String(),
+			Status:    submission.Status,
+			Score:     submission.Score,
+		})
+	}
+
+	ctx.JSON(http.StatusOK, refinedSubmissions)
 }
 
 // @Summary List user submissions
@@ -116,7 +142,18 @@ func SubmissionGetAllHandler(ctx *gin.Context) {
 		return
 	}
 
-	ctx.JSON(http.StatusOK, submissions)
+	refinedSubmissions := make([]submissionRoughResponse, 0)
+	for _, submission := range submissions {
+		refinedSubmissions = append(refinedSubmissions, submissionRoughResponse{
+			Id:        submission.Id.String(),
+			ProblemId: submission.ProblemId.String(),
+			UserId:    submission.UserId.String(),
+			Status:    submission.Status,
+			Score:     submission.Score,
+		})
+	}
+
+	ctx.JSON(http.StatusOK, refinedSubmissions)
 }
 
 // @Summary Get a submission
