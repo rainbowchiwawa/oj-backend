@@ -95,13 +95,13 @@ func SubmissionCreateHandler(ctx *gin.Context) {
 
 // @Summary List submissions by user
 // @Description Get all submissions of a specific user
-// @Tags submissions
+// @Tags users
 // @Security Bearer
 // @Produce json
 // @Param id path string true "User ID"
 // @Success 200 {array} map[string]interface{}
 // @Failure 500 {string} string "Internal Server Error"
-// @Router /submissions/user/{id} [get]
+// @Router /users/{id}/submissions [get]
 func SubmissionGetAllByUserIdHandler(ctx *gin.Context) {
 	userId := ctx.Param("id")
 

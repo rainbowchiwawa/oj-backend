@@ -406,7 +406,7 @@ paths:
       summary: Get submission source
       tags:
       - submissions
-  /submissions/user/{id}:
+  /users/{id}/submissions:
     get:
       description: Get all submissions of a specific user
       parameters:
@@ -433,7 +433,7 @@ paths:
       - Bearer: []
       summary: List submissions by user
       tags:
-      - submissions
+      - users
   /users/login:
     post:
       consumes:
